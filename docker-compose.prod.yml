@@ -1,0 +1,24 @@
+# PRODUCCIÓN. Se aplica EXPLÍCITAMENTE, encadenado con docker-compose.yml
+# (make docker-up-prod ya lo hace) — a diferencia de override.yml, esto
+# nunca se suma solo. Agrega nginx (SSL + headers + rate limit de borde)
+# delante de la app, que acá no expone el puerto 3000 al host directamente.
+services:
+  app:
+    build:
+      target: runtime
+    env_file:
+      - .env.prod
+    expose:
+      - '3000'
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+    ports:
+      - '80:80'
+      - '443:443'
+    depends_on:
+      - app

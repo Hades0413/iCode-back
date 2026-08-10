@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  lint-build-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: icode_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      DATABASE_HOST: localhost
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: icode_test
+      DATABASE_SYNCHRONIZE: 'false'
+      DATABASE_LOGGING: 'false'
+      DATABASE_SSL: 'false'
+      CORS_ORIGIN: '*'
+      THROTTLE_TTL_MS: '60000'
+      THROTTLE_LIMIT: '100'
+      LOG_LEVEL: silent
+      SESSION_IDLE_TTL_DAYS: '30'
+      ONLINE_THRESHOLD_MINUTES: '15'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Run migrations against the CI database
+        run: pnpm run migration:run
+
+      - name: Unit tests
+        run: pnpm run test
+
+      - name: E2E tests
+        run: pnpm run test:e2e

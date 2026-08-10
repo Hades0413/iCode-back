@@ -1,0 +1,19 @@
+# DEV. Compose lo suma solo (sin -f) sobre docker-compose.yml — es el
+# comportamiento estándar de Docker Compose para este nombre de archivo.
+# Para producción se ignora del todo: ver docker-compose.prod.yml.
+services:
+  postgres:
+    ports:
+      - '${DATABASE_PORT:-5432}:5432'
+
+  app:
+    build:
+      target: dev
+    env_file:
+      - .env.dev
+    volumes:
+      - ./src:/app/src
+      - ./test:/app/test
+      - /app/node_modules
+    ports:
+      - '${PORT:-3000}:3000'

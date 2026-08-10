@@ -1,0 +1,129 @@
+# =========================
+# Dependencies
+# =========================
+node_modules/
+jspm_packages/
+.pnp
+.pnp.js
+.pnp.cjs
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# =========================
+# Build output
+# =========================
+/dist
+/build
+/out
+*.tsbuildinfo
+
+# =========================
+# Logs
+# =========================
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# =========================
+# Testing & coverage
+# =========================
+/coverage
+/.nyc_output
+*.lcov
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# =========================
+# Runtime data
+# =========================
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# =========================
+# Diagnostic reports (Node.js)
+# =========================
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# =========================
+# Temp / cache directories
+# =========================
+.temp
+.tmp
+.cache
+.eslintcache
+
+# =========================
+# Database (Prisma / TypeORM / local DB files)
+# =========================
+*.sqlite
+*.sqlite3
+*.db
+/prisma/migrations/dev.db
+
+# Dumps de "make db-backup" — pueden tener datos reales de usuarios.
+/backups/
+
+# =========================
+# Docker
+# =========================
+# docker-compose.override.yml SÍ se commitea acá a propósito: es el
+# overlay de desarrollo (docker-compose.yml es la plantilla base), no un
+# archivo de ajustes personales como en el uso más común de este nombre.
+*.pid
+
+# Certificados TLS — ni siquiera el self-signed de ejemplo se commitea
+# (ver docker/ssl/README.md). "make ssl-generate" los recrea.
+docker/ssl/*.pem
+docker/ssl/*.key
+docker/ssl/*.crt
+!docker/ssl/README.md
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =========================
+# IDEs and editors
+# =========================
+.idea/
+*.iml
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# VSCode (keep shared config, ignore personal state)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# =========================
+# Claude Code local settings
+# =========================
+.claude/settings.local.json*

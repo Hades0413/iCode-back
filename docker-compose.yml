@@ -1,0 +1,52 @@
+# Plantilla base: Postgres + la forma común del servicio "app". Nunca se
+# usa sola a propósito:
+#   - "docker compose up" (sin -f) suma automáticamente
+#     docker-compose.override.yml (dev, hot-reload, sin nginx).
+#   - Producción encadena este archivo con docker-compose.prod.yml
+#     explícitamente (ver Makefile: make docker-up-prod).
+# Todo lo que cambia entre ambientes es una diferencia de VALORES (vía
+# --env-file) o vive en el overlay correspondiente — no hay nada
+# duplicado entre este archivo y los otros dos.
+services:
+  # POSTGRES_USER/PASSWORD acá son el superusuario de BOOTSTRAP del
+  # contenedor (DATABASE_ADMIN_*), no las credenciales que usa la app. La
+  # imagen oficial de Postgres siempre crea a POSTGRES_USER como
+  # superusuario — no hay forma de evitarlo por variable de entorno — así
+  # que la app nunca se conecta con él. init-app-user.sh (que corre solo,
+  # una vez, la primera vez que el volumen está vacío) crea un rol aparte
+  # (DATABASE_USERNAME/PASSWORD, sin privilegios de superusuario) dueño
+  # únicamente de su propia base, y es ESE el que usan la app y las
+  # migraciones. Ver docker/postgres/README.md.
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_ADMIN_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_ADMIN_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+      DATABASE_USERNAME: ${DATABASE_USERNAME}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - icode_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-app-user.sh:/docker-entrypoint-initdb.d/10-init-app-user.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_ADMIN_USERNAME}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      # Dentro de la red de docker-compose, Postgres vive en el hostname
+      # del servicio, no en "localhost" — pisa lo que diga el .env.
+      DATABASE_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  icode_postgres_data:

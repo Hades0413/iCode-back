@@ -1,0 +1,135 @@
+{
+  "info": {
+    "_postman_id": "7b7a84bd-0d42-42e2-bd43-f741f72f0c70",
+    "name": "iCode Back",
+    "description": "Endpoints de iCode-back. Se actualiza en el mismo PR que agrega o cambia un endpoint — ver postman/README.md para la convención.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"admin\",\n  \"password\": \"Passw0rd1!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Credenciales del seed de dev — ver migrations/README.md. Devuelve un token opaco (NO un JWT), pegalo en la variable de colección \"accessToken\" para que el resto de los requests lo usen solos."
+          },
+          "response": []
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Usuario autenticado + sus permisos efectivos (unión de todos sus roles activos, vista UserPermission)."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Revoca la sesión actual de inmediato (UserSession.RevokedAt) — a diferencia de un JWT, el token deja de servir en el acto, no cuando expira solo. 204 sin body."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Usuarios en línea",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/sessions/online",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "sessions", "online"]
+            },
+            "description": "Requiere el permiso ADMIN_VIEW_SESSIONS (solo Administrador por defecto). \"En línea\" = actividad en los últimos ONLINE_THRESHOLD_MINUTES (15 por defecto) — no lo mismo que \"sesión activa\" (esas duran 30 días por la expiración deslizante). La ubicación es aproximada por IP (geoip-lite): null en IPs privadas/locales, típico en dev."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "App",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Endpoint de ejemplo del scaffold de Nest. Responde 'Hello World!' en texto plano."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Vía @nestjs/terminus. 200 = { status: 'ok', info: { database: { status: 'up' } }, ... }. 503 si Postgres no responde."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
