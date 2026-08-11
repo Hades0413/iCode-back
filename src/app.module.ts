@@ -9,6 +9,9 @@ import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth.module';
+import { PatientsModule } from './patients.module';
+import { ClinicalRecordsModule } from './clinical-records.module';
+import { ConsentModule } from './consent.module';
 import { SanitizeMiddleware } from './common/middlewares/sanitize.middleware';
 import { EncryptResponseInterceptor } from './common/interceptors/encrypt-response.interceptor';
 import appConfig from './infrastructure/config/app.config';
@@ -65,6 +68,9 @@ import { PermissionGuard } from './presentation/guards/permission.guard';
     DatabaseModule,
     TerminusModule,
     AuthModule,
+    PatientsModule,
+    ClinicalRecordsModule,
+    ConsentModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

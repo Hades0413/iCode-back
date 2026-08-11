@@ -1,21 +1,41 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Datos base para arrancar en desarrollo: un admin, el árbol de menús,
- * catálogo de permisos, roles y sus asignaciones.
+ * Datos base para arrancar en desarrollo: identidad/RBAC (admin, árbol de
+ * menús, catálogo de permisos, roles) y el dominio "Puente 18+" (ver
+ * prompt_contexto_backend_puente18.md) — IPRESS ficticias, personal de
+ * salud, y un caso demo de cada estado de la transición (paciente menor
+ * con tutor activo / paciente ya adulto con titularidad propia).
+ *
+ * El árbol de menús y el catálogo de permisos/roles reflejan las
+ * pantallas reales de ESTA aplicación (pacientes, historial clínico,
+ * autorizaciones, IPRESS) — no quedó nada de un template genérico tipo
+ * ERP (productos/inventario/facturación/proveedores) sin relación con el
+ * dominio del hackatón.
+ *
+ * "RoleMenu"/"RolePermission" se arman por Code (Role.Code, Menu.Code,
+ * Permission.Code), nunca por Id literal: así se puede reordenar o
+ * agregar filas al árbol de menús o al catálogo de permisos sin tener
+ * que recalcular a mano qué Id le tocó a cada uno.
  *
  * Todas las filas se atribuyen a un usuario real vía subconsulta por
- * "UserName" (nunca un Id literal): como "CreatedById" ahora es una FK de
+ * "UserName" (nunca un Id literal): como "CreatedById" es una FK de
  * verdad a "User"."Id", no hay forma de "inventar" un autor con un string
- * suelto como se hacía antes con 'admin'/'system'.
+ * suelto.
  *
  * ADVERTENCIA: todos los usuarios de ejemplo comparten el mismo
- * PasswordHash/PasswordSalt — es un hash PBKDF2-HMAC-SHA256 real (ver
- * src/common/utils/password-hashing.util.ts), generado para la
- * contraseña "Passw0rd1!". Sirve para loguearte en dev con cualquiera de
- * estos usuarios, pero es una contraseña conocida y pública (está en este
- * archivo) — nunca corras este seed en un ambiente compartido/staging sin
- * regenerar hashes reales y distintos por usuario.
+ * PasswordHash/PasswordSalt — un hash PBKDF2-HMAC-SHA256 real (600.000
+ * iteraciones, ver src/common/utils/password-hashing.util.ts), generado
+ * con hashPassword() para la contraseña "Passw0rd1!" — no algo copiado de
+ * otro sistema (ver el intercambio que llevó a esto: un hash de 64 bytes
+ * de otra base de datos, incompatible con nuestro esquema de 32 bytes,
+ * nunca hubiera autenticado a nadie). Es una contraseña conocida y
+ * pública (está en este archivo) — nunca corras este seed en un ambiente
+ * compartido/staging sin regenerar hashes reales y distintos por
+ * usuario.
+ *
+ * Por regla obligatoria del hackatón: todos los pacientes, tutores e
+ * IPRESS de acá son ficticios/sintéticos, nunca datos reales.
  */
 export class SeedInitialData1786325856482 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -65,18 +85,8 @@ export class SeedInitialData1786325856482 implements MigrationInterface {
         'admin@example.com',
         'admin',
         'admin',
-
-        -- MISMA CONTRASEÑA QUE ico@gmail.com
-        decode(
-          'd6b7168d2d07a5b5cdefdf0c0f7c6bd1f581236c95754df5504883de19a80a6af693bc21567ba9fc14f86a6a49b1a62213e6e1309711adffdf2a865781fd9f39',
-          'hex'
-        ),
-
-        decode(
-          '39eb987d38fc1603d205023f02b73a06',
-          'hex'
-        ),
-
+        decode('b90efe621fc76a08a09f6e7a9c5c8db958cad73c444208ec5cdb9e99d5aabb90','hex'),
+        decode('821eabeec79a13d89640bf8740cab629','hex'),
         NULL,
         0,
         NULL,
@@ -95,80 +105,76 @@ export class SeedInitialData1786325856482 implements MigrationInterface {
       ) AS sys
     `);
 
-    // 3) MENÚS RAÍZ (grupos, sin Url ni padre)
+    // 3) MENÚS RAÍZ (grupos, sin Url ni padre) — reflejan las secciones
+    // reales de Puente 18+ más la administración RBAC genérica.
     await queryRunner.query(`
       INSERT INTO "Menu" ("Code", "Name", "DisplayOrder", "CreatedById")
       SELECT v."Code", v."Name", v."DisplayOrder", adm."Id"
       FROM (VALUES
         ('DASH','Dashboard',1),
         ('USER','Usuarios',2),
-        ('PROD','Productos',3),
-        ('REP','Reportes',4),
-        ('CONF','Configuración',5),
-        ('INV','Inventario',6),
-        ('ORD','Órdenes',7),
-        ('BILL','Facturación',8),
-        ('SUPP','Proveedores',9),
-        ('HELP','Ayuda',10)
+        ('PATIENT','Pacientes',3),
+        ('CLINICAL','Historial Clínico',4),
+        ('CONSENT','Autorizaciones',5),
+        ('IPRESS','Centros de Salud',6),
+        ('REP','Reportes',7),
+        ('CONF','Configuración',8),
+        ('HELP','Ayuda',9)
       ) AS v("Code","Name","DisplayOrder")
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
 
-    // 4) MENÚS HIJOS (enlaces con Url, cuelgan de un menú raíz por Id 1-10)
-    // Code sigue el patrón <CODE_PADRE>_<SUFIJO> para que quede legible y
-    // sin choques entre ramas distintas del árbol.
+    // 4) MENÚS HIJOS (enlaces con Url) — el padre se resuelve por
+    // Menu.Code, no por Id literal, para poder reordenar el bloque de
+    // arriba sin romper nada acá.
     await queryRunner.query(`
       INSERT INTO "Menu" ("ParentMenuId", "Code", "Name", "Url", "CreatedById")
-      SELECT v."ParentMenuId", v."Code", v."Name", v."Url", adm."Id"
+      SELECT parent."Id", v."Code", v."Name", v."Url", adm."Id"
       FROM (VALUES
-        (1,'DASH_HOME','Inicio','/dashboard/inicio'),
-        (2,'USER_MANAGE','Gestión Usuarios','/usuarios/gestion'),
-        (3,'PROD_CATALOG','Catálogo Productos','/productos/catalogo'),
-        (4,'REP_SALES','Reportes Ventas','/reportes/ventas'),
-        (5,'CONF_PARAMS','Parámetros','/configuracion/parametros'),
-        (6,'INV_IN','Entradas Inventario','/inventario/entradas'),
-        (6,'INV_OUT','Salidas Inventario','/inventario/salidas'),
-        (7,'ORD_PENDING','Órdenes Pendientes','/ordenes/pendientes'),
-        (8,'BILL_ISSUED','Facturas Emitidas','/facturacion/emitidas'),
-        (9,'SUPP_MANAGE','Gestión Proveedores','/proveedores/gestion'),
-        (6,'INV_ADJUST','Ajustes Inventario','/inventario/ajustes'),
-        (6,'INV_STOCK','Stock Actual','/inventario/stock'),
-        (8,'BILL_CREDIT_NOTE','Notas de Crédito','/facturacion/notas-credito'),
-        (2,'USER_ROLES','Roles','/usuarios/roles'),
-        (2,'USER_PERMISSIONS','Permisos','/usuarios/permisos'),
-        (4,'REP_KPI','KPIs','/reportes/kpis'),
-        (4,'REP_DAILY','Reporte Diario','/reportes/diario'),
-        (10,'HELP_FAQ','FAQ','/ayuda/faq'),
-        (10,'HELP_CONTACT','Contacto Soporte','/ayuda/contacto'),
-        (7,'ORD_HISTORY','Historial Órdenes','/ordenes/historial')
-      ) AS v("ParentMenuId","Code","Name","Url")
+        ('DASH','DASH_HOME','Inicio','/dashboard/inicio'),
+        ('USER','USER_MANAGE','Gestión Usuarios','/usuarios/gestion'),
+        ('USER','USER_ROLES','Roles','/usuarios/roles'),
+        ('USER','USER_PERMISSIONS','Permisos','/usuarios/permisos'),
+        ('USER','USER_SESSIONS','Sesiones en Línea','/usuarios/sesiones'),
+        ('PATIENT','PATIENT_MANAGE','Gestión de Pacientes','/pacientes/gestion'),
+        ('PATIENT','PATIENT_GUARDIANS','Tutores Legales','/pacientes/tutores'),
+        ('CLINICAL','CLINICAL_RECORDS','Registros Clínicos','/historial-clinico/registros'),
+        ('CLINICAL','CLINICAL_TRANSITION_FILE','Ficha de Transición','/historial-clinico/ficha-transicion'),
+        ('CONSENT','CONSENT_AUTHORIZATIONS','Autorizaciones de Acceso','/autorizaciones/gestion'),
+        ('CONSENT','CONSENT_ACCESS_LOG','Bitácora de Accesos','/autorizaciones/bitacora'),
+        ('IPRESS','IPRESS_QUERY','Consultar Ficha Clínica','/ipress/consulta'),
+        ('IPRESS','IPRESS_FACILITIES','Centros de Salud','/ipress/centros'),
+        ('IPRESS','IPRESS_STAFF','Personal de Salud','/ipress/personal'),
+        ('REP','REP_KPI','Indicadores','/reportes/indicadores'),
+        ('REP','REP_DAILY','Reporte Diario','/reportes/diario'),
+        ('CONF','CONF_PARAMS','Parámetros','/configuracion/parametros'),
+        ('HELP','HELP_FAQ','FAQ','/ayuda/faq'),
+        ('HELP','HELP_CONTACT','Contacto Soporte','/ayuda/contacto')
+      ) AS v("ParentCode","Code","Name","Url")
+      JOIN "Menu" parent ON parent."Code" = v."ParentCode"
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
-    // -> Estos 20 quedan con Id 11..30, en el mismo orden en que se insertan.
 
-    // 5) PERMISOS
-    // MenuId ata cada permiso a su pantalla natural (para agruparlos en la
-    // UI de administración de roles); los Id de Menu son los definidos en
-    // el bloque "MENÚS HIJOS" de arriba (11..30).
+    // 5) PERMISOS genéricos de identidad/administración — MenuId se
+    // resuelve por Menu.Code (LEFT JOIN: NULL si no aplica a ninguna
+    // pantalla puntual).
     await queryRunner.query(`
       INSERT INTO "Permission" ("Code", "Name", "Description", "MenuId", "CreatedById")
-      SELECT v."Code", v."Name", v."Description", v."MenuId", adm."Id"
+      SELECT v."Code", v."Name", v."Description", menu."Id", adm."Id"
       FROM (VALUES
-        ('USR_READ','Leer Usuarios','Permite ver usuarios',12),
-        ('USR_WRITE','Editar Usuarios','Permite crear/editar usuarios',12),
-        ('PROD_MGMT','Gestionar Productos','Permite crear/editar productos',13),
-        ('REP_VIEW','Ver Reportes','Permite consultar reportes',14),
-        ('CONF_SYS','Configurar Sistema','Permite gestionar configuración',15),
-        ('INV_READ','Leer Inventario','Permite ver el inventario',22),
-        ('INV_WRITE','Actualizar Inventario','Permite modificar inventario',21),
-        ('ORD_MGMT','Gestionar Órdenes','Permite procesar órdenes',18),
-        ('BILL_MGMT','Gestionar Facturas','Permite crear y editar facturas',19),
-        ('SUPP_MGMT','Gestionar Proveedores','Permite administrar proveedores',20)
-      ) AS v("Code","Name","Description","MenuId")
+        ('USR_READ','Leer Usuarios','Permite ver usuarios','USER_MANAGE'),
+        ('USR_WRITE','Editar Usuarios','Permite crear/editar usuarios','USER_MANAGE'),
+        ('REP_VIEW','Ver Reportes','Permite consultar reportes','REP_KPI'),
+        ('CONF_SYS','Configurar Sistema','Permite gestionar configuración','CONF_PARAMS')
+      ) AS v("Code","Name","Description","MenuCode")
+      LEFT JOIN "Menu" menu ON menu."Code" = v."MenuCode"
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
 
-    // 6) ROLES
+    // 6) ROLES genéricos de identidad/administración (no ligados al
+    // dominio clínico — ver sección "Puente 18+" más abajo para
+    // PATIENT_TUTOR/HEALTH_STAFF, que son los que sí tienen permisos
+    // sobre pacientes/historial/consentimiento).
     // Solo "Administrador" se marca IsSystemRole: la aplicación debe
     // impedir borrarlo o quitarle el rol al último usuario que lo tenga,
     // para no dejar el sistema sin ningún acceso administrativo.
@@ -181,10 +187,6 @@ export class SeedInitialData1786325856482 implements MigrationInterface {
         ('OPER','Operador','Gestión operativa',false),
         ('CONS','Consulta','Solo lectura',false),
         ('GUEST','Invitado','Acceso restringido',false),
-        ('SALES','Ventas','Gestión de ventas y reportes',false),
-        ('STORE','Almacén','Manejo de inventario',false),
-        ('BILLING','Facturación','Gestión de facturación',false),
-        ('SUPPORT','Soporte','Atención al cliente',false),
         ('AUDIT','Auditor','Acceso a logs y auditorías',false),
         ('USER','User','Rol estándar: solo lectura en todo',false)
       ) AS v("Code","Name","Description","IsSystemRole")
@@ -204,62 +206,55 @@ export class SeedInitialData1786325856482 implements MigrationInterface {
         gen_random_uuid(), true, '', CURRENT_TIMESTAMP, adm."Id"
       FROM (VALUES
         ('supervisor','supervisor@example.com','Supervisor','General'),
-        ('operador','operador@example.com','Operador','Almacen'),
+        ('operador','operador@example.com','Operador','General'),
         ('consulta','consulta@example.com','Usuario','Consulta'),
         ('invitado','invitado@example.com','Guest','User'),
-        ('ventas1','ventas1@example.com','Vendedor','Uno'),
-        ('almacen1','almacen1@example.com','Almacen','Uno'),
-        ('billing1','billing1@example.com','Billing','Uno'),
-        ('soporte1','soporte1@example.com','Soporte','Uno'),
         ('auditor1','auditor1@example.com','Auditor','Uno'),
         ('userstd','userstd@example.com','Usuario','Estandar')
       ) AS v("UserName","Email","FirstName","LastName")
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
 
-    // 8) ROLE -> MENU (antes ROLE -> SUBMENÚ; ids desplazados +10)
+    // 8) ROLE -> MENU (por Code)
     await queryRunner.query(`
       INSERT INTO "RoleMenu" ("RoleId","MenuId","CreatedById")
-      SELECT v."RoleId", v."MenuId", adm."Id"
-      FROM (VALUES
-        (1,11),(1,12),(1,13),(1,14),(1,15),
-        (1,16),(1,17),(1,18),(1,19),(1,20),
-        (1,21),(1,22),(1,23),(1,24),(1,25),
-        (1,26),(1,27),(1,28),(1,29),(1,30),
-        (2,13),(2,14),(2,24),(2,26),(2,27),
-        (3,16),(3,17),(3,21),(3,22),
-        (4,11),(4,14),(4,26),(4,22),
-        (5,11),(5,28),
-        (6,18),(6,19),(6,14),(6,26),(6,30),
-        (7,16),(7,17),(7,21),(7,22),
-        (8,19),(8,23),(8,14),(8,26),
-        (9,28),(9,29),
-        (10,14),(10,26),(10,27),
-        (11,11),(11,14),(11,22)
-      ) AS v("RoleId","MenuId")
+      SELECT r."Id", m."Id", adm."Id"
+      FROM (
+        VALUES
+          ('ADMIN','DASH_HOME'),('ADMIN','USER_MANAGE'),('ADMIN','USER_ROLES'),
+          ('ADMIN','USER_PERMISSIONS'),('ADMIN','USER_SESSIONS'),
+          ('ADMIN','PATIENT_MANAGE'),('ADMIN','PATIENT_GUARDIANS'),
+          ('ADMIN','CLINICAL_RECORDS'),('ADMIN','CLINICAL_TRANSITION_FILE'),
+          ('ADMIN','CONSENT_AUTHORIZATIONS'),('ADMIN','CONSENT_ACCESS_LOG'),
+          ('ADMIN','IPRESS_QUERY'),('ADMIN','IPRESS_FACILITIES'),('ADMIN','IPRESS_STAFF'),
+          ('ADMIN','REP_KPI'),('ADMIN','REP_DAILY'),
+          ('ADMIN','CONF_PARAMS'),('ADMIN','HELP_FAQ'),('ADMIN','HELP_CONTACT'),
+          ('SUP','DASH_HOME'),('SUP','USER_MANAGE'),('SUP','REP_KPI'),('SUP','REP_DAILY'),
+          ('OPER','DASH_HOME'),('OPER','REP_KPI'),
+          ('CONS','DASH_HOME'),('CONS','REP_KPI'),
+          ('GUEST','DASH_HOME'),
+          ('AUDIT','DASH_HOME'),
+          ('USER','DASH_HOME'),('USER','REP_KPI')
+      ) AS v("RoleCode","MenuCode")
+      JOIN "Role" r ON r."Code" = v."RoleCode"
+      JOIN "Menu" m ON m."Code" = v."MenuCode"
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
 
-    // 9) ROLE -> PERMISSIONS
-    // El MenuId por fila que tenía el script original ya no existe: ese
-    // mismo par (RoleId, PermissionId) aparecía repetido con distinto
-    // MenuId (ej. rol 3 con el permiso 7 apuntando a dos pantallas
-    // distintas), lo cual era la fuente de datos "sin sentido". Como el
-    // contexto de pantalla ahora es propiedad del Permission (ver arriba),
-    // aquí solo queda un par único por fila.
+    // 9) ROLE -> PERMISSIONS (genéricos, por Code)
     await queryRunner.query(`
       INSERT INTO "RolePermission" ("RoleId","PermissionId","CreatedById")
-      SELECT v."RoleId", v."PermissionId", adm."Id"
-      FROM (VALUES
-        (1,1),(1,2),(1,3),(1,4),(1,5),
-        (2,3),(2,4),
-        (3,6),(3,7),
-        (4,4),(4,6),
-        (6,8),(6,9),
-        (8,9),
-        (10,4),
-        (11,1),(11,4),(11,6),(11,9)
-      ) AS v("RoleId","PermissionId")
+      SELECT r."Id", p."Id", adm."Id"
+      FROM (
+        VALUES
+          ('ADMIN','USR_READ'),('ADMIN','USR_WRITE'),('ADMIN','REP_VIEW'),('ADMIN','CONF_SYS'),
+          ('SUP','USR_READ'),('SUP','REP_VIEW'),
+          ('OPER','REP_VIEW'),
+          ('CONS','REP_VIEW'),
+          ('USER','USR_READ'),('USER','REP_VIEW')
+      ) AS v("RoleCode","PermissionCode")
+      JOIN "Role" r ON r."Code" = v."RoleCode"
+      JOIN "Permission" p ON p."Code" = v."PermissionCode"
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
 
@@ -284,10 +279,6 @@ export class SeedInitialData1786325856482 implements MigrationInterface {
           ('operador','OPER'),
           ('consulta','CONS'),
           ('invitado','GUEST'),
-          ('ventas1','SALES'),
-          ('almacen1','STORE'),
-          ('billing1','BILLING'),
-          ('soporte1','SUPPORT'),
           ('auditor1','AUDIT'),
           ('auditor1','CONS'),
           ('userstd','USER')
@@ -311,17 +302,312 @@ export class SeedInitialData1786325856482 implements MigrationInterface {
           ('admin','DELETE','Menu','3','Name,Code'),
           ('invitado','LOGIN','User','N/A',NULL),
           ('admin','LOGOUT','User','N/A',NULL),
-          ('operador','INSERT','Product','10','Name,Price'),
+          ('operador','INSERT','Patient','1','FirstName,LastName'),
           ('consulta','SELECT','Report','N/A','Filters'),
           ('admin','UPDATE','Permission','4','Description'),
           ('supervisor','DELETE','UserRole','7','UserId,RoleId'),
-          ('ventas1','INSERT','Order','15','OrderDate,Total')
+          ('auditor1','SELECT','ClinicalAccessLog','N/A','Filters')
       ) AS x("UserName","Type","TableName","PrimaryKey","AffectedColumns")
       JOIN "User" u ON u."UserName" = x."UserName"
+    `);
+
+    // 12) PERMISO "usuarios en línea" (GET /admin/sessions/online) — solo
+    // Administrador lo tiene por defecto.
+    await queryRunner.query(`
+      INSERT INTO "Permission" ("Code", "Name", "Description", "MenuId", "CreatedById")
+      SELECT 'ADMIN_VIEW_SESSIONS', 'Ver sesiones activas', 'Permite ver qué usuarios están conectados y desde dónde', menu."Id", adm."Id"
+      FROM (SELECT "Id" FROM "Menu" WHERE "Code" = 'USER_SESSIONS') AS menu
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    await queryRunner.query(`
+      INSERT INTO "RolePermission" ("RoleId", "PermissionId", "CreatedById")
+      SELECT role."Id", perm."Id", adm."Id"
+      FROM (SELECT "Id" FROM "Role" WHERE "Code" = 'ADMIN') AS role
+      CROSS JOIN (SELECT "Id" FROM "Permission" WHERE "Code" = 'ADMIN_VIEW_SESSIONS') AS perm
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // ============================================================
+    // Puente 18+ — a partir de acá, todo lo del dominio clínico (ver
+    // prompt_contexto_backend_puente18.md). Roles/permisos por Code (no
+    // por Id): más seguro que depender del orden exacto de inserción.
+    // ============================================================
+
+    // 13) PERMISOS del dominio clínico — cada uno atado a su pantalla
+    // real (ver bloque "MENÚS HIJOS" de arriba).
+    await queryRunner.query(`
+      INSERT INTO "Permission" ("Code", "Name", "Description", "MenuId", "CreatedById")
+      SELECT v."Code", v."Name", v."Description", menu."Id", adm."Id"
+      FROM (VALUES
+        ('PATIENT_READ','Ver pacientes','Permite ver datos demográficos de pacientes','PATIENT_MANAGE'),
+        ('PATIENT_WRITE','Gestionar pacientes','Permite crear/editar pacientes y tutores','PATIENT_MANAGE'),
+        ('CLINICAL_RECORD_READ','Ver historial clínico','Permite ver diagnósticos, medicación, alergias, cirugías y exámenes','CLINICAL_RECORDS'),
+        ('CLINICAL_RECORD_WRITE','Registrar historial clínico','Permite registrar nuevos ítems del historial clínico','CLINICAL_RECORDS'),
+        ('CONSENT_MANAGE','Gestionar autorizaciones','Permite otorgar/revocar autorizaciones de acceso a la ficha clínica','CONSENT_AUTHORIZATIONS'),
+        ('CONSENT_VIEW','Ver autorizaciones','Permite ver las autorizaciones de acceso vigentes/revocadas','CONSENT_AUTHORIZATIONS'),
+        ('IPRESS_QUERY','Consultar ficha clínica (IPRESS)','Permite a un centro de salud consultar el resumen clínico de un paciente','IPRESS_QUERY'),
+        ('IPRESS_EMERGENCY_ACCESS','Acceso de emergencia','Permite acceder a información BASICA sin autorización previa por riesgo de vida','IPRESS_QUERY'),
+        ('ACCESS_LOG_VIEW','Ver bitácora de accesos','Permite ver quién accedió a la ficha clínica de un paciente y cuándo','CONSENT_ACCESS_LOG')
+      ) AS v("Code","Name","Description","MenuCode")
+      JOIN "Menu" menu ON menu."Code" = v."MenuCode"
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 14) ROLES del dominio clínico
+    await queryRunner.query(`
+      INSERT INTO "Role" ("Code", "Name", "Description", "IsSystemRole", "CreatedById")
+      SELECT v."Code", v."Name", v."Description", false, adm."Id"
+      FROM (VALUES
+        ('PATIENT_TUTOR','Paciente / Tutor','Paciente o tutor legal de un paciente menor de edad'),
+        ('HEALTH_STAFF','Personal de Salud','Personal clínico de un centro de salud (IPRESS)')
+      ) AS v("Code","Name","Description")
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 15) ROLE -> PERMISSION del dominio clínico (incluye ADMIN)
+    await queryRunner.query(`
+      INSERT INTO "RolePermission" ("RoleId","PermissionId","CreatedById")
+      SELECT r."Id", p."Id", adm."Id"
+      FROM (
+        VALUES
+          ('ADMIN','PATIENT_READ'), ('ADMIN','PATIENT_WRITE'),
+          ('ADMIN','CLINICAL_RECORD_READ'), ('ADMIN','CLINICAL_RECORD_WRITE'),
+          ('ADMIN','CONSENT_MANAGE'), ('ADMIN','CONSENT_VIEW'),
+          ('ADMIN','IPRESS_QUERY'), ('ADMIN','IPRESS_EMERGENCY_ACCESS'),
+          ('ADMIN','ACCESS_LOG_VIEW'),
+          ('PATIENT_TUTOR','PATIENT_READ'), ('PATIENT_TUTOR','CONSENT_MANAGE'),
+          ('PATIENT_TUTOR','CONSENT_VIEW'), ('PATIENT_TUTOR','ACCESS_LOG_VIEW'),
+          ('HEALTH_STAFF','PATIENT_READ'), ('HEALTH_STAFF','PATIENT_WRITE'),
+          ('HEALTH_STAFF','CLINICAL_RECORD_READ'), ('HEALTH_STAFF','CLINICAL_RECORD_WRITE'),
+          ('HEALTH_STAFF','IPRESS_QUERY'), ('HEALTH_STAFF','IPRESS_EMERGENCY_ACCESS')
+      ) AS v("RoleCode","PermissionCode")
+      JOIN "Role" r ON r."Code" = v."RoleCode"
+      JOIN "Permission" p ON p."Code" = v."PermissionCode"
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 16) ROLE -> MENU del dominio clínico (por Code)
+    await queryRunner.query(`
+      INSERT INTO "RoleMenu" ("RoleId","MenuId","CreatedById")
+      SELECT r."Id", m."Id", adm."Id"
+      FROM (
+        VALUES
+          ('PATIENT_TUTOR','DASH_HOME'),
+          ('PATIENT_TUTOR','PATIENT_MANAGE'),
+          ('PATIENT_TUTOR','CLINICAL_TRANSITION_FILE'),
+          ('PATIENT_TUTOR','CONSENT_AUTHORIZATIONS'),
+          ('PATIENT_TUTOR','CONSENT_ACCESS_LOG'),
+          ('HEALTH_STAFF','DASH_HOME'),
+          ('HEALTH_STAFF','PATIENT_MANAGE'),
+          ('HEALTH_STAFF','CLINICAL_RECORDS'),
+          ('HEALTH_STAFF','CLINICAL_TRANSITION_FILE'),
+          ('HEALTH_STAFF','IPRESS_QUERY')
+      ) AS v("RoleCode","MenuCode")
+      JOIN "Role" r ON r."Code" = v."RoleCode"
+      JOIN "Menu" m ON m."Code" = v."MenuCode"
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 17) IPRESS FICTICIAS (ninguna corresponde a un centro real — nombres
+    // deliberadamente genéricos para que no se confundan con INSNSB ni
+    // ninguna otra institución existente)
+    await queryRunner.query(`
+      INSERT INTO "HealthFacility" ("Name","RenhiceCode","FacilityType","Address","CreatedById")
+      SELECT v."Name", v."RenhiceCode", v."FacilityType", v."Address", adm."Id"
+      FROM (VALUES
+        ('IPRESS Pediátrica Ficticia Norte','DEMO-PED-001','PEDIATRICO','Av. Ficticia 100, Lima (demo)'),
+        ('Hospital Ficticio Adulto Sur','DEMO-ADU-002','ADULTO','Av. Ficticia 200, Lima (demo)'),
+        ('Centro de Salud Ficticio Mixto Este','DEMO-MIX-003','MIXTO','Av. Ficticia 300, Lima (demo)')
+      ) AS v("Name","RenhiceCode","FacilityType","Address")
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 18) USUARIOS DEMO del dominio clínico (mismo hash/salt de
+    // "Passw0rd1!" que el resto del seed).
+    await queryRunner.query(`
+      INSERT INTO "User"
+      ("UserName","Email","FirstName","LastName","PasswordHash","PasswordSalt","SecurityStamp","State","Photo","CreatedAt","CreatedById")
+      SELECT
+        v."UserName", v."Email", v."FirstName", v."LastName",
+        decode('b90efe621fc76a08a09f6e7a9c5c8db958cad73c444208ec5cdb9e99d5aabb90','hex'),
+        decode('821eabeec79a13d89640bf8740cab629','hex'),
+        gen_random_uuid(), true, '', CURRENT_TIMESTAMP, adm."Id"
+      FROM (VALUES
+        ('tutor1','tutor1@example.com','Tutor','Ficticio Uno'),
+        ('tutor2','tutor2@example.com','Tutor','Ficticio Dos'),
+        ('paciente1','paciente1@example.com','Paciente','Ficticio Adulto'),
+        ('pediatra1','pediatra1@example.com','Pediatra','Ficticio Uno'),
+        ('internista1','internista1@example.com','Internista','Ficticio Uno')
+      ) AS v("UserName","Email","FirstName","LastName")
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    await queryRunner.query(`
+      INSERT INTO "UserRole" ("UserId","RoleId","CreatedById")
+      SELECT u."Id", r."Id", adm."Id"
+      FROM (VALUES
+        ('tutor1','PATIENT_TUTOR'),
+        ('tutor2','PATIENT_TUTOR'),
+        ('paciente1','PATIENT_TUTOR'),
+        ('pediatra1','HEALTH_STAFF'),
+        ('internista1','HEALTH_STAFF')
+      ) AS x("UserName","RoleCode")
+      JOIN "User" u ON u."UserName" = x."UserName"
+      JOIN "Role" r ON r."Code" = x."RoleCode"
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 19) A qué IPRESS pertenece cada usuario de personal de salud —
+    // tabla de unión, no una columna en "User" (ver
+    // domain/entities/facilities/health-facility-staff.entity.ts).
+    await queryRunner.query(`
+      INSERT INTO "HealthFacilityStaff" ("UserId","HealthFacilityId","CreatedById")
+      SELECT u."Id", fac."Id", adm."Id"
+      FROM (VALUES
+        ('pediatra1','DEMO-PED-001'),
+        ('internista1','DEMO-ADU-002')
+      ) AS x("UserName","FacilityCode")
+      JOIN "User" u ON u."UserName" = x."UserName"
+      JOIN "HealthFacility" fac ON fac."RenhiceCode" = x."FacilityCode"
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 20) PACIENTE A: menor de edad (16 años, calculado desde hoy para que
+    // el seed siga siendo válido sin importar cuándo se corra), tutor
+    // activo — este es el estado "PRE transición".
+    await queryRunner.query(`
+      INSERT INTO "Patient" ("DocumentType","DocumentNumber","FirstName","LastName","DateOfBirth","BloodType","UserId","CreatedById")
+      SELECT 'DNI','70000001','Paciente','Ficticio Menor', CURRENT_DATE - INTERVAL '16 years', 'O+', NULL, adm."Id"
+      FROM (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    await queryRunner.query(`
+      INSERT INTO "LegalGuardian" ("PatientId","UserId","RelationshipType","IsPrimary","IsActive","CreatedById")
+      SELECT p."Id", u."Id", 'MADRE', true, true, adm."Id"
+      FROM (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000001') AS p
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'tutor1') AS u
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 21) PACIENTE B: ya adulto (19 años), titularidad propia — este es el
+    // estado "POST transición": tiene su propio login y su ex-tutor
+    // quedó desactivado (simula que TitleTransferService ya corrió).
+    await queryRunner.query(`
+      INSERT INTO "Patient" ("DocumentType","DocumentNumber","FirstName","LastName","DateOfBirth","BloodType","UserId","CreatedById")
+      SELECT 'DNI','70000002','Paciente','Ficticio Adulto', CURRENT_DATE - INTERVAL '19 years', 'A-',
+        (SELECT "Id" FROM "User" WHERE "UserName" = 'paciente1'), adm."Id"
+      FROM (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    await queryRunner.query(`
+      INSERT INTO "LegalGuardian" ("PatientId","UserId","RelationshipType","IsPrimary","IsActive","DeactivatedAt","CreatedById")
+      SELECT p."Id", u."Id", 'PADRE', true, false, CURRENT_TIMESTAMP, adm."Id"
+      FROM (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000002') AS p
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'tutor2') AS u
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 22) HISTORIAL CLÍNICO demo — mezcla BASICA/SENSIBLE a propósito para
+    // mostrar que la clasificación es por ítem, no por paciente.
+    await queryRunner.query(`
+      INSERT INTO "ClinicalRecord" ("PatientId","RecordType","SensitivityLevel","Title","Details","OccurredAt","HealthFacilityId","RecordedByUserId","CreatedById")
+      SELECT pat."Id", v."RecordType", v."SensitivityLevel", v."Title", v."Details"::jsonb, v."OccurredAt"::date, fac."Id", staff."Id", adm."Id"
+      FROM (VALUES
+        ('70000001','DIAGNOSTICO','BASICA','Asma bronquial leve','{}', (CURRENT_DATE - INTERVAL '5 years')::text, 'DEMO-PED-001','pediatra1'),
+        ('70000001','ALERGIA','BASICA','Alergia a la penicilina','{"severidad":"MODERADA"}', (CURRENT_DATE - INTERVAL '8 years')::text, 'DEMO-PED-001','pediatra1'),
+        ('70000001','MEDICACION','BASICA','Salbutamol inhalador','{"dosis":"100mcg","frecuencia":"segun necesidad"}', (CURRENT_DATE - INTERVAL '1 years')::text, 'DEMO-PED-001','pediatra1'),
+        ('70000002','DIAGNOSTICO','BASICA','Diabetes tipo 1','{}', (CURRENT_DATE - INTERVAL '10 years')::text, 'DEMO-ADU-002','internista1'),
+        ('70000002','DIAGNOSTICO','SENSIBLE','Seguimiento en salud mental','{}', (CURRENT_DATE - INTERVAL '2 years')::text, 'DEMO-ADU-002','internista1')
+      ) AS v("DocumentNumber","RecordType","SensitivityLevel","Title","Details","OccurredAt","FacilityCode","StaffUserName")
+      JOIN "Patient" pat ON pat."DocumentNumber" = v."DocumentNumber"
+      JOIN "HealthFacility" fac ON fac."RenhiceCode" = v."FacilityCode"
+      JOIN "User" staff ON staff."UserName" = v."StaffUserName"
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 23) AUTORIZACIONES DE ACCESO demo
+    // Paciente A (menor): su tutor autoriza a la IPRESS Adulto Sur a ver
+    // su info BASICA (por si necesita atención de urgencia ahí).
+    await queryRunner.query(`
+      INSERT INTO "AccessAuthorization" ("PatientId","HealthFacilityId","GrantedByUserId","Scope","Status","GrantedAt","CreatedById")
+      SELECT pat."Id", fac."Id", tutor."Id", 'BASICA', 'ACTIVA', CURRENT_TIMESTAMP, adm."Id"
+      FROM (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000001') AS pat
+      CROSS JOIN (SELECT "Id" FROM "HealthFacility" WHERE "RenhiceCode" = 'DEMO-ADU-002') AS fac
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'tutor1') AS tutor
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    // Paciente B (adulto, titular de sí mismo): se autoriza a sí mismo
+    // ante la IPRESS Mixta Este con alcance TODA (incluye lo sensible).
+    await queryRunner.query(`
+      INSERT INTO "AccessAuthorization" ("PatientId","HealthFacilityId","GrantedByUserId","Scope","Status","GrantedAt","CreatedById")
+      SELECT pat."Id", fac."Id", pac."Id", 'TODA', 'ACTIVA', CURRENT_TIMESTAMP, adm."Id"
+      FROM (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000002') AS pat
+      CROSS JOIN (SELECT "Id" FROM "HealthFacility" WHERE "RenhiceCode" = 'DEMO-MIX-003') AS fac
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'paciente1') AS pac
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 24) BITÁCORA DE ACCESOS demo — un acceso autorizado, uno de
+    // emergencia (sin autorización previa, solo BASICA) y uno denegado
+    // (pidieron SENSIBLE sin autorización), para mostrar los 3 caminos de
+    // AccessDecisionService.
+    await queryRunner.query(`
+      INSERT INTO "ClinicalAccessLog" ("PatientId","AccessedByUserId","HealthFacilityId","RequestedScope","Granted","WasEmergencyOverride","DenialReason")
+      SELECT pat."Id", staff."Id", fac."Id", v."RequestedScope", v."Granted"::boolean, v."WasEmergencyOverride"::boolean, v."DenialReason"
+      FROM (VALUES
+        ('70000001','internista1','DEMO-ADU-002','BASICA','true','false',NULL),
+        ('70000002','internista1','DEMO-MIX-003','BASICA','true','true','Acceso de emergencia: sin autorización previa vigente'),
+        ('70000002','pediatra1','DEMO-PED-001','SENSIBLE','false','false','Sin autorización vigente para información sensible')
+      ) AS v("DocumentNumber","StaffUserName","FacilityCode","RequestedScope","Granted","WasEmergencyOverride","DenialReason")
+      JOIN "Patient" pat ON pat."DocumentNumber" = v."DocumentNumber"
+      JOIN "User" staff ON staff."UserName" = v."StaffUserName"
+      JOIN "HealthFacility" fac ON fac."RenhiceCode" = v."FacilityCode"
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DELETE FROM "ClinicalAccessLog"`);
+    await queryRunner.query(`DELETE FROM "AccessAuthorization"`);
+    await queryRunner.query(`DELETE FROM "ClinicalRecord"`);
+    await queryRunner.query(`DELETE FROM "LegalGuardian"`);
+    await queryRunner.query(`DELETE FROM "Patient"`);
+    await queryRunner.query(`DELETE FROM "HealthFacilityStaff"`);
+    await queryRunner.query(`DELETE FROM "HealthFacility"`);
+    // "User" nunca se borra de verdad salvo que ya no tenga sesiones
+    // referenciándolo (ver FK_UserSession_User, sin ON DELETE CASCADE a
+    // propósito) — se limpia primero por si alguien ya inició sesión con
+    // estos usuarios demo antes de revertir.
+    await queryRunner.query(`
+      DELETE FROM "UserSession" WHERE "UserId" IN (
+        SELECT "Id" FROM "User" WHERE "UserName" IN ('tutor1','tutor2','paciente1','pediatra1','internista1')
+      )
+    `);
+    await queryRunner.query(`
+      DELETE FROM "User" WHERE "UserName" IN ('tutor1','tutor2','paciente1','pediatra1','internista1')
+    `);
+    await queryRunner.query(`
+      DELETE FROM "RolePermission" WHERE "RoleId" IN (
+        SELECT "Id" FROM "Role" WHERE "Code" IN ('PATIENT_TUTOR','HEALTH_STAFF')
+      )
+    `);
+    await queryRunner.query(`
+      DELETE FROM "RoleMenu" WHERE "RoleId" IN (
+        SELECT "Id" FROM "Role" WHERE "Code" IN ('PATIENT_TUTOR','HEALTH_STAFF')
+      )
+    `);
+    await queryRunner.query(
+      `DELETE FROM "Role" WHERE "Code" IN ('PATIENT_TUTOR','HEALTH_STAFF')`,
+    );
+    await queryRunner.query(`
+      DELETE FROM "Permission" WHERE "Code" IN (
+        'PATIENT_READ','PATIENT_WRITE','CLINICAL_RECORD_READ','CLINICAL_RECORD_WRITE',
+        'CONSENT_MANAGE','CONSENT_VIEW','IPRESS_QUERY','IPRESS_EMERGENCY_ACCESS','ACCESS_LOG_VIEW'
+      )
+    `);
+    await queryRunner.query(`
+      DELETE FROM "RolePermission" WHERE "PermissionId" = (SELECT "Id" FROM "Permission" WHERE "Code" = 'ADMIN_VIEW_SESSIONS')
+    `);
+    await queryRunner.query(
+      `DELETE FROM "Permission" WHERE "Code" = 'ADMIN_VIEW_SESSIONS'`,
+    );
     await queryRunner.query(`DELETE FROM "Audit"`);
     await queryRunner.query(`DELETE FROM "UserRole"`);
     await queryRunner.query(`DELETE FROM "RolePermission"`);

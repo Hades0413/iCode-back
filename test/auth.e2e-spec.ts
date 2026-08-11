@@ -79,6 +79,6 @@ describe('Auth (e2e)', () => {
       .expect(200);
 
     const profile = meRes.body as { permissions: string[] };
-    expect(profile.permissions.sort()).toEqual(['INV_READ', 'REP_VIEW']);
+    expect(profile.permissions.sort()).toEqual(['REP_VIEW']);
   });
 });

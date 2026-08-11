@@ -161,6 +161,43 @@ el gateway del proveedor de internet, no al usuario — en datos móviles
 puede marcar una ciudad distinta a la real. Es `null` en IPs
 privadas/locales (`127.0.0.1`, `10.x`, etc.), el caso normal en dev.
 
+## Puente 18+ (dominio clínico)
+
+Backend del desafío "Puente 18+" — Hackatón Niño San Borja 2026 (ver
+[prompt_contexto_backend_puente18.md](prompt_contexto_backend_puente18.md)).
+Portal de continuidad de información clínica para pacientes en transición
+pediátrico→adulto: acceso de solo lectura al historial resumido, con
+traspaso de titularidad al cumplir 18 y consentimiento explícito
+diferenciando información básica de sensible. Detalle completo del
+modelo en
+[migrations/README.md](src/infrastructure/database/migrations/README.md#puente-18-dominio-clínico).
+
+**Todos los datos (pacientes, tutores, IPRESS, historial) son
+ficticios/sintéticos — condición obligatoria de las bases del hackatón,
+nunca se carga información real.**
+
+Endpoints principales (todos requieren sesión + el permiso indicado):
+
+- `POST /patients`, `GET /patients/:id`, `POST /patients/:id/guardians`,
+  `POST /patients/:id/transfer-title` — datos del paciente/tutor y el
+  traspaso de titularidad a los 18.
+- `POST|GET /patients/:id/clinical-records`,
+  `GET /patients/:id/clinical-records/transition-file` — historial
+  clínico y la "ficha de transición" portable (requisito #6).
+- `POST /patients/:id/access-authorizations`,
+  `PATCH /patients/:id/access-authorizations/:authId/revoke`,
+  `GET /patients/:id/access-authorizations`,
+  `GET /patients/:id/access-log` — consentimiento y bitácora de accesos.
+- `GET /health-facility-access/patients/:documentNumber/clinical-summary?scope=BASICA|SENSIBLE|TODA&isEmergency=` —
+  el endpoint simulado de una IPRESS consultando a un paciente (requisito
+  #4); respeta la autorización vigente y la excepción de emergencia solo
+  para `BASICA`.
+
+Usuarios demo del seed (misma contraseña `Passw0rd1!` que el resto):
+`tutor1` (tutor activo de un paciente menor), `paciente1` (paciente ya
+adulto, titular de sí mismo), `pediatra1`/`internista1` (personal de
+salud, cada uno vinculado a una IPRESS ficticia distinta).
+
 ## Seguridad
 
 - **Cabeceras**: Helmet (`src/common/constants/security.constants.ts`) +

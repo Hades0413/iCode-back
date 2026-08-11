@@ -137,7 +137,7 @@ describe('AuthService', () => {
         passwordSalt: Buffer.from('should-not-leak'),
       });
       dataSource.query.mockResolvedValue([
-        { PermissionCode: 'INV_READ' },
+        { PermissionCode: 'PATIENT_READ' },
         { PermissionCode: 'REP_VIEW' },
       ]);
 
@@ -149,7 +149,7 @@ describe('AuthService', () => {
         email: 'user@example.com',
         firstName: 'Ana',
         lastName: 'Gómez',
-        permissions: ['INV_READ', 'REP_VIEW'],
+        permissions: ['PATIENT_READ', 'REP_VIEW'],
       });
       expect(profile).not.toHaveProperty('passwordHash');
       expect(profile).not.toHaveProperty('passwordSalt');
