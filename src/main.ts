@@ -5,6 +5,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { HELMET_OPTIONS } from './common/constants/security.constants';
@@ -20,6 +21,7 @@ async function bootstrap() {
   const corsOrigin = configService.get<string>('app.corsOrigin', '*');
 
   app.use(helmet(HELMET_OPTIONS));
+  app.use(cookieParser());
   app.enableCors({
     origin: corsOrigin === '*' ? true : corsOrigin.split(','),
     credentials: true,

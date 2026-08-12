@@ -251,6 +251,9 @@ export class JourneyService {
       (await this.guardianRepository.findOne({
         where: { patientId, isActive: true },
       }));
+    const guardianRelationship = guardianAny
+      ? RELATIONSHIP_LABELS[guardianAny.relationshipType]
+      : null;
     const guardianDto = guardianAny
       ? {
           firstName:
@@ -258,8 +261,8 @@ export class JourneyService {
               await this.userRepository.findOne({
                 where: { id: guardianAny.userId },
               })
-            )?.firstName ?? null,
-          relationship: RELATIONSHIP_LABELS[guardianAny.relationshipType],
+            )?.firstName ?? '',
+          relationship: guardianRelationship as string,
           hasAccess: guardianAny.hasJourneyAccess,
         }
       : null;
@@ -273,9 +276,17 @@ export class JourneyService {
           `${detail.firstName.charAt(0)}${detail.lastName.charAt(0)}`.toUpperCase(),
         age: detail.age,
         state: detail.state,
-        diagnosis: detail.primaryDiagnosis,
-        attendingStaffId: detail.attendingStaffId,
-        specialtyName: detail.specialtyName,
+        diagnosis: detail.primaryDiagnosis ?? '',
+        // Sin un generador de lenguaje llano todavía (ver sección 3 del
+        // .md sobre la generación server-side de la historia clínica) —
+        // por ahora el mismo texto técnico hace de placeholder; queda
+        // documentado como simplificación deliberada del prototipo.
+        diagnosisPlain: detail.primaryDiagnosis ?? '',
+        followUp: detail.specialtyName
+          ? `Seguimiento en ${detail.specialtyName}`
+          : '',
+        attendingDoctor: detail.attendingDoctor ?? 'Por asignar',
+        specialty: detail.specialtyName,
         medications: medications.map((m) => ({
           initial: m.initial,
           name: m.name,
@@ -292,7 +303,7 @@ export class JourneyService {
           detail: c.detail,
         })),
         checklist: checklist.map((c) => ({
-          id: c.id,
+          id: String(c.id),
           title: c.title,
           detail: c.detail,
           pendingLabel: c.pendingLabel,
@@ -302,17 +313,19 @@ export class JourneyService {
         healthPost: detail.healthPost,
         appointment: detail.appointment,
         appointmentAddress: transition?.appointmentAddress ?? null,
-        arriveMinutesEarly: transition?.arriveMinutesEarly ?? null,
+        arriveMinutesEarly: transition?.arriveMinutesEarly ?? 0,
         admissionNote: transition?.admissionNote ?? null,
         summaryApproved:
           detail.summaryStatus === ClinicalSummaryStatus.APPROVED,
         guardian: guardianDto,
         pendingMessage: pendingMessage
           ? {
-              id: pendingMessage.id,
+              id: String(pendingMessage.id),
               text: pendingMessage.text,
               sentAt: pendingMessage.sentAt.toISOString(),
-              sentById: pendingMessage.sentById,
+              from: guardianRelationship
+                ? `tu ${guardianRelationship}`
+                : 'tu tutor',
             }
           : null,
       },

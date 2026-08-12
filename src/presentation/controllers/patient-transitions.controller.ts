@@ -41,25 +41,10 @@ export class PatientTransitionsController {
     return this.transitionService.create(dto, user.id);
   }
 
-  @Get('in-tutelage')
-  @RequirePermission('PATIENT_READ')
-  @ApiOperation({
-    summary:
-      'El tablero del especialista: pacientes en tutela (menores de 18), recortado por su propia especialidad',
-  })
-  findInTutelage(@CurrentUser() user: AuthenticatedUser) {
-    return this.transitionService.findInTutelage(user.id);
-  }
-
-  @Get('post-transition')
-  @RequirePermission('REPORT_READ')
-  @ApiOperation({
-    summary:
-      'Panel de seguimiento: pacientes que ya cumplieron 18 — vista de supervisión, sin recorte por especialidad',
-  })
-  findPostTransition() {
-    return this.transitionService.findPostTransition();
-  }
+  // "in-tutelage"/"post-transition" viven en PatientsController
+  // (bajo "/patients"), no acá — es el path que llama iCode-front y
+  // necesitan estar en la MISMA clase que "GET /patients/:id" para no
+  // quedar sombreadas por ella (ver patients.module.ts).
 
   @Get(':patientId')
   @RequirePermission('PATIENT_READ')

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TransitionSummary } from './domain/entities/clinical/transition-summary.entity';
+import { User } from './domain/entities/user.entity';
 import { TransitionSummaryService } from './application/services/clinical/transition-summary.service';
 import { TransitionSummariesController } from './presentation/controllers/transition-summaries.controller';
 import { TransitionModule } from './transition.module';
@@ -11,7 +12,10 @@ import { TransitionModule } from './transition.module';
  * revés. Ver PUENTE18_FRONTEND_INTEGRATION.md, sección 3.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([TransitionSummary]), TransitionModule],
+  imports: [
+    TypeOrmModule.forFeature([TransitionSummary, User]),
+    TransitionModule,
+  ],
   controllers: [TransitionSummariesController],
   providers: [TransitionSummaryService],
   exports: [TransitionSummaryService],

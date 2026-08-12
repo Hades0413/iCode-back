@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Patient } from '../../../domain/entities/patients/patient.entity';
 import { LegalGuardian } from '../../../domain/entities/patients/legal-guardian.entity';
+import * as ageUtil from '../../../common/utils/age.util';
 
 export interface TitleTransferResult {
   transferred: boolean;
@@ -32,69 +33,21 @@ export class TitleTransferService {
     private readonly guardianRepository: Repository<LegalGuardian>,
   ) {}
 
+  /** Delega en common/utils/age.util.ts — única fuente de verdad para la edad, compartida sin acoplar módulos (ver ese archivo). */
   isAdult(dateOfBirth: string): boolean {
-    const dob = new Date(dateOfBirth);
-    const now = new Date();
-    let age = now.getFullYear() - dob.getFullYear();
-    const hasHadBirthdayThisYear =
-      now.getMonth() > dob.getMonth() ||
-      (now.getMonth() === dob.getMonth() && now.getDate() >= dob.getDate());
-    if (!hasHadBirthdayThisYear) {
-      age -= 1;
-    }
-    return age >= 18;
+    return ageUtil.isAdult(dateOfBirth);
   }
 
-  /**
-   * "17a 11m" — la edad actual ya formateada. Usado por el dominio de
-   * transición (ver PatientTransitionService) para no reimplementar el
-   * cálculo de edad en dos lugares — la única fuente de verdad para "qué
-   * edad tiene" sigue siendo "DateOfBirth", nunca una columna guardada.
-   */
   formatAge(dateOfBirth: string): string {
-    const dob = new Date(dateOfBirth);
-    const now = new Date();
-    let years = now.getFullYear() - dob.getFullYear();
-    let months = now.getMonth() - dob.getMonth();
-    if (now.getDate() < dob.getDate()) {
-      months -= 1;
-    }
-    if (months < 0) {
-      years -= 1;
-      months += 12;
-    }
-    return `${years}a ${months}m`;
+    return ageUtil.formatAge(dateOfBirth);
   }
 
-  /**
-   * Positivo = faltan N meses para los 18; 0 o negativo = ya cumplió
-   * hace |N| meses. Base de las ventanas de tiempo del dominio de
-   * transición (habilitación a los 3 meses, aviso a la posta a los 2,
-   * firma en el último mes — ver PUENTE18_FRONTEND_INTEGRATION.md).
-   */
   monthsToEighteen(dateOfBirth: string): number {
-    const dob = new Date(dateOfBirth);
-    const eighteenthBirthday = new Date(dob);
-    eighteenthBirthday.setFullYear(dob.getFullYear() + 18);
-    const now = new Date();
-    let months =
-      (eighteenthBirthday.getFullYear() - now.getFullYear()) * 12 +
-      (eighteenthBirthday.getMonth() - now.getMonth());
-    if (eighteenthBirthday.getDate() < now.getDate()) {
-      months -= 1;
-    }
-    return months;
+    return ageUtil.monthsToEighteen(dateOfBirth);
   }
 
-  /** null si todavía no cumplió 18. */
   turnedEighteenAt(dateOfBirth: string): string | null {
-    if (!this.isAdult(dateOfBirth)) {
-      return null;
-    }
-    const dob = new Date(dateOfBirth);
-    const eighteenthBirthday = new Date(dob);
-    eighteenthBirthday.setFullYear(dob.getFullYear() + 18);
-    return eighteenthBirthday.toISOString().slice(0, 10);
+    return ageUtil.turnedEighteenAt(dateOfBirth);
   }
 
   /**

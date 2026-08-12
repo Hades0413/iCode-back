@@ -4,7 +4,11 @@ import { HealthPostSummaryDto } from '../transition/patient-transition-response.
 import { AppointmentDetails } from '../../../domain/entities/patients/patient-transition.entity';
 
 export class JourneyChecklistItemDto {
-  @ApiProperty() id: number;
+  @ApiProperty({
+    description:
+      'String — así lo espera JourneyChecklistItem.id de iCode-front',
+  })
+  id: string;
   @ApiProperty() title: string;
   @ApiProperty({ nullable: true }) detail: string | null;
   @ApiProperty({ nullable: true }) pendingLabel: string | null;
@@ -35,15 +39,21 @@ export class JourneyGuideEntryDto {
 }
 
 export class JourneyMessageDto {
-  @ApiProperty() id: number;
+  @ApiProperty({
+    description: 'String — así lo espera JourneyMessage.id de iCode-front',
+  })
+  id: string;
   @ApiProperty() text: string;
   @ApiProperty() sentAt: string;
-  @ApiProperty({ description: 'Id de "User" — quien lo mandó' })
-  sentById: number;
+  @ApiProperty({
+    description:
+      'El parentesco de quien lo mandó, no un nombre — "tu madre" (ver domain/entities/journey.entity.ts de iCode-front)',
+  })
+  from: string;
 }
 
 export class JourneyGuardianDto {
-  @ApiProperty({ nullable: true }) firstName: string | null;
+  @ApiProperty() firstName: string;
   @ApiProperty() relationship: string;
   @ApiProperty() hasAccess: boolean;
 }
@@ -70,9 +80,20 @@ export class TransitionJourneyDto {
   @ApiProperty() initials: string;
   @ApiProperty() age: string;
   @ApiProperty({ enum: TransitionState }) state: TransitionState;
-  @ApiProperty({ nullable: true }) diagnosis: string | null;
-  @ApiProperty() attendingStaffId: number | null;
-  @ApiProperty() specialtyName: string;
+  @ApiProperty({ description: 'El diagnóstico técnico' }) diagnosis: string;
+  @ApiProperty({
+    description:
+      'El mismo diagnóstico en lenguaje llano — hoy es un placeholder (mismo texto que "diagnosis"), ver la nota en JourneyService',
+  })
+  diagnosisPlain: string;
+  @ApiProperty({ description: 'Qué seguir vigilando y cada cuánto' })
+  followUp: string;
+  @ApiProperty({
+    description:
+      'Nombre resuelto — quien armó el resumen y sigue disponible para dudas',
+  })
+  attendingDoctor: string;
+  @ApiProperty() specialty: string;
   @ApiProperty({ type: [JourneyMedicationDto] })
   medications: JourneyMedicationDto[];
   @ApiProperty({ type: [JourneyAllergyDto] }) allergies: JourneyAllergyDto[];
@@ -84,7 +105,10 @@ export class TransitionJourneyDto {
   healthPost: HealthPostSummaryDto | null;
   @ApiProperty({ nullable: true }) appointment: AppointmentDetails | null;
   @ApiProperty({ nullable: true }) appointmentAddress: string | null;
-  @ApiProperty({ nullable: true }) arriveMinutesEarly: number | null;
+  @ApiProperty({
+    description: 'Nunca null — 0 si no hay dato (el front lo declara number)',
+  })
+  arriveMinutesEarly: number;
   @ApiProperty({ nullable: true }) admissionNote: string | null;
   @ApiProperty() summaryApproved: boolean;
   @ApiProperty({ type: JourneyGuardianDto, nullable: true })

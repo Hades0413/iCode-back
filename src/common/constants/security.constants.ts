@@ -38,6 +38,23 @@ export const PASSWORD_POLICY = {
     'Mínimo 12 caracteres, con al menos una minúscula, una mayúscula, un número y un símbolo.',
 };
 
+/**
+ * El token de sesión viaja de dos formas, a propósito, no una sola:
+ *
+ * - **Cookie httpOnly** (esta constante) — la usa el front web
+ *   (iCode-front): el JS del navegador nunca la puede leer, así un XSS no
+ *   puede robar el token. `SessionAuthGuard` la acepta como alternativa al
+ *   header.
+ * - **Header `Authorization: Bearer`** — sigue existiendo para Swagger,
+ *   Postman, y un futuro cliente móvil (React Native no tiene el manejo
+ *   automático de cookies de un navegador) — ver el body de
+ *   `POST /auth/login`, que sigue devolviendo el token igual que siempre.
+ *
+ * Ninguna reemplaza a la otra — `SessionAuthGuard` prueba el header
+ * primero y cae a la cookie si no está.
+ */
+export const SESSION_COOKIE_NAME = 'icode_session';
+
 /** Límites por defecto de paginación — ver src/common/dto/pagination-query.dto.ts */
 export const PAGINATION_DEFAULTS = {
   PAGE: 1,

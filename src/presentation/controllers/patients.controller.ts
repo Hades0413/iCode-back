@@ -9,6 +9,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PatientService } from '../../application/services/patients/patient.service';
 import { TitleTransferService } from '../../application/services/patients/title-transfer.service';
+import { PatientTransitionService } from '../../application/services/transition/patient-transition.service';
 import { CreatePatientDto } from '../../application/dto/patients/create-patient.dto';
 import { CreateLegalGuardianDto } from '../../application/dto/patients/create-legal-guardian.dto';
 import { RequirePermission } from '../decorators/require-permission.decorator';
@@ -22,6 +23,7 @@ export class PatientsController {
   constructor(
     private readonly patientService: PatientService,
     private readonly titleTransferService: TitleTransferService,
+    private readonly transitionService: PatientTransitionService,
   ) {}
 
   @Post()
@@ -34,6 +36,33 @@ export class PatientsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.patientService.create(dto, user.id);
+  }
+
+  /**
+   * Declaradas ANTES de "GET :id" a propósito — Express matea rutas en
+   * el orden en que se registran DENTRO de la misma clase, así que
+   * "in-tutelage"/"post-transition" tienen que ganarle a ":id" sin
+   * depender de en qué orden Nest resuelva los módulos (ver
+   * patients.module.ts y PUENTE18_FRONTEND_INTEGRATION.md, sección 2).
+   */
+  @Get('in-tutelage')
+  @RequirePermission('PATIENT_COHORT_READ')
+  @ApiOperation({
+    summary:
+      'El tablero del especialista: pacientes en tutela (menores de 18), recortado por su propia especialidad',
+  })
+  findInTutelage(@CurrentUser() user: AuthenticatedUser) {
+    return this.transitionService.findInTutelage(user.id);
+  }
+
+  @Get('post-transition')
+  @RequirePermission('REPORT_READ')
+  @ApiOperation({
+    summary:
+      'Panel de seguimiento: pacientes que ya cumplieron 18 — vista de supervisión, sin recorte por especialidad',
+  })
+  findPostTransition() {
+    return this.transitionService.findPostTransition();
   }
 
   @Get(':id')

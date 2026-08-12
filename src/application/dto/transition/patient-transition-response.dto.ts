@@ -12,33 +12,41 @@ export class PostNoticeSummaryDto {
   @ApiProperty()
   sentAt: string;
 
-  @ApiProperty({ description: 'Id de "User" — quien avisó' })
+  @ApiProperty({ description: 'Id de "User" — para el resto del backend' })
   sentById: number;
+
+  @ApiProperty({ description: 'Nombre resuelto — lo que espera iCode-front' })
+  sentBy: string;
 }
 
 export class ReferralAlertSummaryDto {
   @ApiProperty()
   sentAt: string;
 
-  @ApiProperty({ description: 'Id de "User" — quien reclamó' })
+  @ApiProperty({ description: 'Id de "User" — para el resto del backend' })
   sentById: number;
+
+  @ApiProperty({ description: 'Nombre resuelto — lo que espera iCode-front' })
+  sentBy: string;
 
   @ApiProperty({ enum: ReferralAlertReason })
   reason: ReferralAlertReason;
 }
 
 export class HealthPostSummaryDto {
-  @ApiProperty()
-  id: number;
+  @ApiProperty({
+    description: 'String — así lo espera HealthPost.id de iCode-front',
+  })
+  id: string;
 
   @ApiProperty()
   name: string;
 
-  @ApiProperty({ nullable: true })
-  district: string | null;
+  @ApiProperty()
+  district: string;
 
-  @ApiProperty({ nullable: true })
-  distanceKm: number | null;
+  @ApiProperty()
+  distanceKm: number;
 }
 
 /**
@@ -48,13 +56,31 @@ export class HealthPostSummaryDto {
  * resumen, última acción): ver
  * PUENTE18_FRONTEND_INTEGRATION.md, sección 2, sobre por qué esos
  * valores nunca se guardan como columna.
+ *
+ * Tiene MÁS campos de los que declara `Patient` en iCode-front a
+ * propósito: `id`/`initials`/`dni`/`medicalRecord`/`diagnosis`/
+ * `specialty`/`attendingDoctor` son alias en el shape exacto que el
+ * front espera (ver domain/entities/patient.entity.ts de iCode-front);
+ * `patientId`/`documentNumber`/`medicalRecordNumber`/`primaryDiagnosis`/
+ * `specialtyName`/`attendingStaffId` siguen existiendo tal cual porque
+ * el resto de los servicios de este backend (TransitionSummaryService,
+ * JourneyService...) ya los usan — un campo de más en el JSON no rompe
+ * a nadie, así que se agregó en vez de renombrar.
  */
 export class PatientTransitionResponseDto {
+  @ApiProperty({
+    description: 'Alias string de patientId — así lo espera iCode-front',
+  })
+  id: string;
+
   @ApiProperty()
   patientId: number;
 
   @ApiProperty()
   documentNumber: string;
+
+  @ApiProperty({ description: 'Alias de documentNumber' })
+  dni: string;
 
   @ApiProperty()
   firstName: string;
@@ -62,14 +88,28 @@ export class PatientTransitionResponseDto {
   @ApiProperty()
   lastName: string;
 
+  @ApiProperty({
+    description:
+      'Dos letras — el front no muestra el nombre completo en la tabla',
+  })
+  initials: string;
+
   @ApiProperty({ nullable: true })
   sex: string | null;
 
   @ApiProperty()
   medicalRecordNumber: string;
 
+  @ApiProperty({ description: 'Alias de medicalRecordNumber' })
+  medicalRecord: string;
+
   @ApiProperty({ nullable: true })
   primaryDiagnosis: string | null;
+
+  @ApiProperty({
+    description: "Alias de primaryDiagnosis, nunca null ('' si no hay)",
+  })
+  diagnosis: string;
 
   @ApiProperty({ description: 'Ej. "17a 11m" — ya formateada por el servidor' })
   age: string;
@@ -92,12 +132,21 @@ export class PatientTransitionResponseDto {
   @ApiProperty()
   specialtyName: string;
 
+  @ApiProperty({ description: 'Alias de specialtyName' })
+  specialty: string;
+
+  @ApiProperty({
+    nullable: true,
+    description: 'Id de "HealthFacilityStaff" — para el resto del backend',
+  })
+  attendingStaffId: number | null;
+
   @ApiProperty({
     nullable: true,
     description:
-      'Id de "HealthFacilityStaff" — el nombre del especialista se resuelve aparte (ver GET /users/:id), este módulo nunca desnormaliza nombres de "User", igual que LegalGuardian/ClinicalRecord',
+      'Nombre resuelto del médico a cargo — lo que espera iCode-front',
   })
-  attendingStaffId: number | null;
+  attendingDoctor: string | null;
 
   @ApiProperty({ nullable: true })
   district: string | null;
@@ -138,10 +187,17 @@ export class PatientTransitionResponseDto {
   counterReferralStatus: CounterReferralStatus | 'NONE';
 
   @ApiProperty({
-    nullable: true,
-    description: 'Lo más reciente entre avisos, reclamos, resumen y carta',
+    description:
+      'Lo más reciente entre avisos, reclamos, resumen y carta — nunca null (el front lo declara string)',
   })
-  lastAction: string | null;
+  lastAction: string;
+
+  @ApiProperty({
+    nullable: true,
+    description:
+      '0..1, avance del checklist de preparación del propio paciente. null si no tiene ítems.',
+  })
+  checklistProgress: number | null;
 
   @ApiProperty({
     type: [PostNoticeSummaryDto],

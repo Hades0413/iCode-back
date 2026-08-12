@@ -449,3 +449,138 @@ siempre a partir de `isAdult`, mismo criterio que el resto del dominio
 Verificado contra Postgres real: `70000001` (menor) devuelve "Oncología
 pediátrica"; `70000002` (ya adulto) devuelve "Cardiología de adultos" —
 el mismo `SpecialtyId` de siempre, solo cambia la etiqueta.
+
+## 12. Integración real con el front (`iCode-front`) — ✅ hecho
+
+A diferencia de las secciones 1-11 (que solo construían el back), esta
+fase sí tocó `iCode-front`, por pedido explícito: módulo por módulo,
+empezando en el login, apagando `VITE_USE_MOCK_DATA` y verificando cada
+pantalla contra el back real con Playwright (capturas + consola +
+respuestas HTTP), no solo lectura de código.
+
+### Sesión con cookie httpOnly (no `localStorage`)
+
+Pedido explícito de seguridad: el token de sesión no debía vivir en
+`localStorage` (XSS). Cambios:
+
+- Back: `cookie-parser` + `res.cookie('icode_session', token, {httpOnly,
+  secure: isProd, sameSite: isProd ? 'none' : 'lax', path:'/'})` en
+  `login`/`logout` (`auth.controller.ts`). `SessionAuthGuard` acepta
+  **ambas** formas — header `Authorization: Bearer` (Swagger/Postman/
+  mobile) y la cookie (`extractSessionToken`, header primero, cookie
+  como fallback) — no se rompió nada para quien ya usaba el header.
+- Front: se borró `token-storage.ts` y `token-storage.port.ts` enteros;
+  `AuthService` ya no depende de ningún storage — el navegador maneja
+  la cookie solo. `api-client.ts` usa `withCredentials: true` en vez del
+  interceptor que leía el token. CORS en el back con origen reflejado
+  (no wildcard) + `credentials: true`, requisito de las cookies
+  cross-site.
+
+### Reconciliación de contratos (front manda, back se ajusta)
+
+El front nunca se tocó en su capa de acceso a datos (los repositorios
+siempre pegaban a las mismas rutas HTTP reales; solo el adaptador axios
+tenía un mock activable por env var). "Integrar" fue sobre todo hacer
+que las DTOs del back devuelvan **exactamente** la forma que las
+entidades de dominio del front ya esperaban: `id` como `string` (no
+numérico), nombres resueltos en vez de `*ById` crudos, defaults no
+nulos donde el front declara el campo sin `| null`. Se aplicó siempre
+de forma **aditiva** (se agregan campos alias/calculados, nunca se
+renombran o quitan los que otros servicios del back ya consumían
+internamente) — afectó a los DTOs de transición, historia clínica,
+contrarreferencia y "mi recorrido".
+
+También se corrigió una convención rota que rompía el ruteo del
+workspace para **todo** usuario: `domain/rules/permissions.ts` del
+front usaba códigos en plural (`PATIENTS_READ`, etc.) que nunca
+existieron en el back (siempre fue singular, `PATIENT_READ`) — el
+`admin` aterrizaba en `/mi-recorrido` en vez de `/pacientes` porque
+`visibleSections()` no encontraba ningún permiso que calzara. Un solo
+punto de cambio (la constante), 4 sitios de uso, todos por la misma
+constante.
+
+### Bug de autorización cruzada encontrado y corregido — `PATIENT_COHORT_READ`
+
+Verificando `tutor1` (rol de tutor del recorrido) contra el back real se
+encontró una fuga real, no un detalle de UX: `tutor1` también tiene
+`PATIENT_READ` heredado de un rol previo (`PATIENT_TUTOR`, del dominio
+de **consentimiento** — lectura de *su propio* paciente puntual). Como
+`GET /patients/in-tutelage` (el tablero del especialista — la cohorte
+**completa** de pacientes en tutela) estaba gateado con ese mismo
+código, cualquier tutor con `PATIENT_READ` podía ver la cohorte entera
+de pacientes de otros, no solo el suyo — agravado porque
+`PatientTransitionService.getSpecialtyIdsForUser` trata "sin fila en
+`HealthFacilityStaff`" como "sin restricción" (pensado para admin/
+supervisión, pero cualquier no-staff con `PATIENT_READ` también cumplía
+esa condición).
+
+**Corrección**: permiso nuevo y dedicado, `PATIENT_COHORT_READ`, solo
+para ese endpoint — `PATIENT_READ` queda intacto para el dominio de
+consentimiento, que ya lo usaba antes de esta fase. Todo dentro de los
+mismos 2 archivos de migración (nada de una migración "de parche"):
+`ADMIN` y `ESPECIALISTA_PEDIATRIA` lo reciben además de sus permisos
+existentes; el grant de `OPER` sobre `PATIENT_READ` (que solo existía
+para probar que el tablero se ve pero las acciones dan 403) se
+reemplazó por `PATIENT_COHORT_READ` — nunca tuvo un uso legítimo sobre
+el permiso puntual. `patients.controller.ts` (`findInTutelage`) ahora
+exige `PATIENT_COHORT_READ`.
+
+Verificado contra un Postgres reseteado desde cero (`docker compose down
+-v` + `migration:run` + reinicio del back), con `curl` para los 4
+casos:
+
+| Usuario | `GET /patients/in-tutelage` |
+|---|---|
+| `tutor1` | **403** — `Falta el permiso PATIENT_COHORT_READ` |
+| `pediatra1` | 200 |
+| `operador` | 200 |
+| `admin` | 200 |
+
+Este cambio de permiso en el back tiene un efecto directo en el front,
+porque `workspace-sections.ts` decide qué secciones mostrar en el riel
+usando el mismo código de permiso que exige el endpoint real (contrato
+explícito, documentado en el comment del propio archivo). Se propagó
+el split a `iCode-front`:
+
+- `domain/rules/permissions.ts`: nueva constante
+  `patientsCohortRead: 'PATIENT_COHORT_READ'`, junto a `patientsRead`
+  (que sigue siendo `PATIENT_READ`, sin tocar).
+- `workspace-sections.ts` (sección "Pacientes") y `patients.page.tsx`
+  (el mensaje de "sin acceso") ahora usan `patientsCohortRead`.
+- `mock-database.ts`: se agregó `patientsCohortRead` a los usuarios mock
+  que en el back real caen bajo `ADMIN`/`ESPECIALISTA_PEDIATRIA`/`OPER`
+  (`admin`, `medico`, `operador`), para que el modo mock (`VITE_USE_MOCK_DATA=1`)
+  siga viéndose igual que antes de este cambio.
+
+Verificado con Playwright contra el back real, reseteado desde cero:
+antes de este ajuste, `operador` había perdido la sección "Pacientes"
+del riel (aterrizaba en "Ya cumplieron 18") porque ya no tenía
+`PATIENT_READ`; tras el ajuste vuelve a aterrizar en `/pacientes` con la
+sección visible. Efecto colateral bueno, no buscado: `referencias1`
+pasó a aterrizar correctamente en `/referencias` (antes caía en
+`/pacientes` porque `AREA_REFERENCIAS` sí tiene `PATIENT_READ` — un
+permiso que nunca debió habilitar esa sección del riel).
+
+### Usuario demo agregado — `sinpermisos`
+
+El botón de acceso rápido "sinpermisos" ya existía en la pantalla de
+login del front (`login.page.tsx`, hint: "recibe 403 en la lista") pero
+no tenía ningún usuario real detrás en el seed — con
+`VITE_USE_MOCK_DATA=0` el botón siempre daba 401. Se agregó a
+`SeedTransitionData.ts` un usuario `sinpermisos` (activo, sin ningún
+`UserRole`) junto a los demás usuarios demo de esta migración. Loguea
+bien y el back le niega todo con 403, exactamente lo que el botón
+anuncia. Verificado con Playwright: pantalla de "sin acceso" mostrando
+el permiso correcto (`PATIENT_COHORT_READ`).
+
+### Pendiente reconocido, no corregido en esta pasada
+
+`TransitionSummaryService.findByPatient` (historia clínica de
+transferencia) no tiene ningún chequeo de fila por paciente — cualquier
+usuario con `PATIENT_READ` puntual podría leer la historia de
+transferencia de **cualquier** paciente, no solo el suyo. Es la misma
+familia de bug que `PATIENT_COHORT_READ` acaba de cerrar, pero en el
+endpoint de lectura de la historia en vez de en el listado de cohorte.
+No se corrigió ahora por el riesgo de tocar más superficie a esta
+altura sin tiempo para reverificar todo — queda documentado como
+deuda conocida, no como un descuido silencioso.

@@ -16,9 +16,11 @@ import { TransitionSummary } from '../../../domain/entities/clinical/transition-
 import { PostNotice } from '../../../domain/entities/referrals/post-notice.entity';
 import { ReferralAlert } from '../../../domain/entities/referrals/referral-alert.entity';
 import { CounterReferral } from '../../../domain/entities/referrals/counter-referral.entity';
+import { JourneyChecklistItem } from '../../../domain/entities/journey/journey-checklist-item.entity';
+import { User } from '../../../domain/entities/user.entity';
 import { TransitionState } from '../../../domain/enums/transition-state.enum';
 import { CounterReferralStatus } from '../../../domain/enums/counter-referral-status.enum';
-import { TitleTransferService } from '../patients/title-transfer.service';
+import * as ageUtil from '../../../common/utils/age.util';
 import { calculateSummaryProgress } from './summary-progress.calculator';
 import { CreatePatientTransitionDto } from '../../dto/transition/create-patient-transition.dto';
 import { UpdatePatientTransitionDto } from '../../dto/transition/update-patient-transition.dto';
@@ -65,7 +67,10 @@ export class PatientTransitionService {
     private readonly referralAlertRepository: Repository<ReferralAlert>,
     @InjectRepository(CounterReferral)
     private readonly counterReferralRepository: Repository<CounterReferral>,
-    private readonly titleTransferService: TitleTransferService,
+    @InjectRepository(JourneyChecklistItem)
+    private readonly checklistRepository: Repository<JourneyChecklistItem>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async create(
@@ -282,10 +287,8 @@ export class PatientTransitionService {
       patientId,
       state: transition.state,
       specialtyId: transition.specialtyId,
-      monthsToEighteen: this.titleTransferService.monthsToEighteen(
-        patient.dateOfBirth,
-      ),
-      isAdult: this.titleTransferService.isAdult(patient.dateOfBirth),
+      monthsToEighteen: ageUtil.monthsToEighteen(patient.dateOfBirth),
+      isAdult: ageUtil.isAdult(patient.dateOfBirth),
       counterReferralStatus: transition.counterReferralStatus,
       referredToPostAt: transition.referredToPostAt,
       healthPostFacilityId: transition.healthPostFacilityId,
@@ -450,19 +453,68 @@ export class PatientTransitionService {
         ? await this.facilityRepository.find({ where: { id: In(facilityIds) } })
         : [];
 
-    const [summaries, postNotices, referralAlerts, counterReferrals] =
-      await Promise.all([
-        this.summaryRepository.find({ where: { patientId: In(patientIds) } }),
-        this.postNoticeRepository.find({
-          where: { patientId: In(patientIds) },
-        }),
-        this.referralAlertRepository.find({
-          where: { patientId: In(patientIds) },
-        }),
-        this.counterReferralRepository.find({
-          where: { patientId: In(patientIds) },
-        }),
-      ]);
+    const [
+      summaries,
+      postNotices,
+      referralAlerts,
+      counterReferrals,
+      checklistItems,
+    ] = await Promise.all([
+      this.summaryRepository.find({ where: { patientId: In(patientIds) } }),
+      this.postNoticeRepository.find({
+        where: { patientId: In(patientIds) },
+      }),
+      this.referralAlertRepository.find({
+        where: { patientId: In(patientIds) },
+      }),
+      this.counterReferralRepository.find({
+        where: { patientId: In(patientIds) },
+      }),
+      this.checklistRepository.find({
+        where: { patientId: In(patientIds) },
+      }),
+    ]);
+
+    const attendingStaffIds = [
+      ...new Set(
+        transitions
+          .map((t) => t.attendingStaffId)
+          .filter((id): id is number => id !== null),
+      ),
+    ];
+    const attendingStaff =
+      attendingStaffIds.length > 0
+        ? await this.staffRepository.find({
+            where: { id: In(attendingStaffIds) },
+          })
+        : [];
+    const staffUserIdByStaffId = new Map(
+      attendingStaff.map((s) => [s.id, s.userId]),
+    );
+
+    // Todos los "quién" que hay que resolver a un nombre en esta tanda:
+    // el médico a cargo (vía su fila de staff) y quien mandó cada aviso
+    // o reclamo — el front los quiere como texto, no como id (ver
+    // PUENTE18_FRONTEND_INTEGRATION.md, sección 2, "reconciliación con
+    // el contrato real del front").
+    const userIdsToResolve = [
+      ...new Set(
+        [
+          ...attendingStaff.map((s) => s.userId),
+          ...postNotices.map((n) => n.sentById),
+          ...referralAlerts.map((a) => a.sentById),
+        ].filter((id): id is number => id !== undefined && id !== null),
+      ),
+    ];
+    const users =
+      userIdsToResolve.length > 0
+        ? await this.userRepository.find({
+            where: { id: In(userIdsToResolve) },
+          })
+        : [];
+    const userNameById = new Map(
+      users.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()]),
+    );
 
     const patientById = new Map(patients.map((p) => [p.id, p]));
     const specialtyById = new Map(specialties.map((s) => [s.id, s]));
@@ -496,31 +548,55 @@ export class PatientTransitionService {
         counterReferral,
       );
       const daysWaitingOnPost = this.computeDaysWaitingOnPost(t);
-      const isAdult = this.titleTransferService.isAdult(patient.dateOfBirth);
+      const isAdult = ageUtil.isAdult(patient.dateOfBirth);
+      const specialtyName =
+        (isAdult ? specialty?.adultName : null) ?? specialty?.name ?? '';
+      const attendingStaffUserId = t.attendingStaffId
+        ? staffUserIdByStaffId.get(t.attendingStaffId)
+        : undefined;
+      const attendingDoctor =
+        attendingStaffUserId !== undefined
+          ? (userNameById.get(attendingStaffUserId) ?? null)
+          : null;
+      const itemsForPatient = checklistItems.filter(
+        (c) => c.patientId === t.patientId,
+      );
+      const checklistProgress =
+        itemsForPatient.length === 0
+          ? null
+          : itemsForPatient.filter((c) => c.done).length /
+            itemsForPatient.length;
 
       return {
+        // "id" es la forma en la que el front trata la identidad del
+        // paciente (string opaco, ver domain/entities/patient.entity.ts
+        // de iCode-front) — "patientId" sigue existiendo tal cual para
+        // el resto de los servicios de este backend.
+        id: String(t.patientId),
         patientId: t.patientId,
         documentNumber: patient.documentNumber,
+        dni: patient.documentNumber,
         firstName: patient.firstName,
         lastName: patient.lastName,
+        initials:
+          `${patient.firstName.charAt(0)}${patient.lastName.charAt(0)}`.toUpperCase(),
         sex: patient.sex,
         medicalRecordNumber: t.medicalRecordNumber,
+        medicalRecord: t.medicalRecordNumber,
         primaryDiagnosis: t.primaryDiagnosis,
-        age: this.titleTransferService.formatAge(patient.dateOfBirth),
-        monthsToEighteen: this.titleTransferService.monthsToEighteen(
-          patient.dateOfBirth,
-        ),
-        turnedEighteenAt: this.titleTransferService.turnedEighteenAt(
-          patient.dateOfBirth,
-        ),
+        diagnosis: t.primaryDiagnosis ?? '',
+        age: ageUtil.formatAge(patient.dateOfBirth),
+        monthsToEighteen: ageUtil.monthsToEighteen(patient.dateOfBirth),
+        turnedEighteenAt: ageUtil.turnedEighteenAt(patient.dateOfBirth),
         isAdult,
         specialtyId: t.specialtyId,
         // Ya cumplidos los 18, la etiqueta pasa a la variante "de
         // adultos" del catálogo (ver medical-specialty.entity.ts) — nunca
         // se reasigna "SpecialtyId", solo cambia el nombre mostrado.
-        specialtyName:
-          (isAdult ? specialty?.adultName : null) ?? specialty?.name ?? '',
+        specialtyName,
+        specialty: specialtyName,
         attendingStaffId: t.attendingStaffId,
+        attendingDoctor,
         district: t.district,
         state: t.state,
         summaryStatus: summary?.status ?? 'NONE',
@@ -529,13 +605,13 @@ export class PatientTransitionService {
           : 0,
         healthPost: healthPost
           ? {
-              id: healthPost.id,
+              id: String(healthPost.id),
               name: healthPost.name,
-              district: healthPost.district,
+              district: healthPost.district ?? '',
               distanceKm:
                 t.healthPostDistanceKm !== null
                   ? Number(t.healthPostDistanceKm)
-                  : null,
+                  : 0,
             }
           : null,
         referredToPostAt: t.referredToPostAt
@@ -545,14 +621,19 @@ export class PatientTransitionService {
         hospitalReferral: t.hospitalReferral,
         appointment: t.appointment,
         counterReferralStatus: t.counterReferralStatus,
-        lastAction,
+        // El front lo declara "string" siempre (no nullable) — sin
+        // ningún evento todavía, es un caso recién dado de alta.
+        lastAction: lastAction ?? 'Sin actividad registrada todavía',
+        checklistProgress,
         postNotices: noticesForPatient.map((n) => ({
           sentAt: n.sentAt.toISOString(),
           sentById: n.sentById,
+          sentBy: userNameById.get(n.sentById) ?? '',
         })),
         referralAlerts: alertsForPatient.map((a) => ({
           sentAt: a.sentAt.toISOString(),
           sentById: a.sentById,
+          sentBy: userNameById.get(a.sentById) ?? '',
           reason: a.reason,
         })),
       };

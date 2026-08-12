@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsOptional,
   IsString,
   Length,
   ValidateNested,
@@ -19,6 +20,28 @@ class TransitionSummarySectionEditDto {
   @IsString()
   @Length(0, 4000)
   body: string;
+
+  /**
+   * iCode-front manda la sección COMPLETA (id/title/body/hint, ver
+   * ClinicalSummarySection) — con "forbidNonWhitelisted: true" en el
+   * ValidationPipe global (ver main.ts), no declarar estos dos campos
+   * haría que cualquier PUT del front se rechace con 400. El servidor
+   * los acepta pero los ignora (ver el comentario de más abajo): la
+   * estructura del documento no se redefine desde el cliente.
+   */
+  @ApiProperty({
+    required: false,
+    description:
+      'Se acepta pero se ignora — la estructura no la define el cliente',
+  })
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiProperty({ required: false, description: 'Se acepta pero se ignora' })
+  @IsOptional()
+  @IsString()
+  hint?: string;
 }
 
 /**

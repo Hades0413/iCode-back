@@ -26,6 +26,16 @@ export class SeedTransitionData1786325858482 implements MigrationInterface {
         CHECK ("FacilityType" IN ('PEDIATRICO','ADULTO','MIXTO','POSTA'))
     `);
 
+    // 0) Sexo de los dos pacientes demo — dato de identidad genuino que
+    // SeedInitialData no pedía todavía (ver Patient.Sex,
+    // PUENTE18_FRONTEND_INTEGRATION.md). El front lo declara no-nulo.
+    await queryRunner.query(`
+      UPDATE "Patient" SET "Sex" = 'M' WHERE "DocumentNumber" = '70000001'
+    `);
+    await queryRunner.query(`
+      UPDATE "Patient" SET "Sex" = 'M' WHERE "DocumentNumber" = '70000002'
+    `);
+
     // 1) ESPECIALIDADES MÉDICAS (catálogo). "AdultName" es la etiqueta que
     // corresponde mostrar cuando el paciente ya cumplió 18 (ver
     // domain/entities/facilities/medical-specialty.entity.ts) — nunca se
@@ -56,6 +66,14 @@ export class SeedTransitionData1786325858482 implements MigrationInterface {
       INSERT INTO "Permission" ("Code","Name","Description","MenuId","CreatedById")
       SELECT v."Code", v."Name", v."Description", NULL, adm."Id"
       FROM (VALUES
+        -- Deliberadamente DISTINTO de "PATIENT_READ" (que ya existía para
+        -- el dominio de consentimiento, ver migrations/README.md): ese
+        -- permiso lo tienen tutores/pacientes para leer SU propio
+        -- paciente puntual — si el tablero del especialista también
+        -- aceptara "PATIENT_READ", cualquier tutor vería la cohorte
+        -- ENTERA de otros pacientes, no solo la suya. Verificado con un
+        -- Postgres real (ver PUENTE18_FRONTEND_INTEGRATION.md, sección 9).
+        ('PATIENT_COHORT_READ','Ver la cohorte de pacientes en tutela','Permite ver el tablero del especialista — todos los pacientes en tutela, no uno puntual'),
         ('REPORT_READ','Ver panel post-transición','Permite ver el panel de seguimiento de pacientes que ya cumplieron 18'),
         ('REFERRAL_READ','Ver bandejas de referencias','Permite ver las bandejas de avisos y contrarreferencias del área'),
         ('REFERRAL_AREA_NOTIFY','Reclamar al área de referencias','Permite al especialista reclamarle al área que avise a la posta o mande la carta'),
@@ -88,9 +106,11 @@ export class SeedTransitionData1786325858482 implements MigrationInterface {
       SELECT r."Id", p."Id", adm."Id"
       FROM (
         VALUES
+          ('ADMIN','PATIENT_COHORT_READ'),
           ('ADMIN','REPORT_READ'),('ADMIN','REFERRAL_READ'),('ADMIN','REFERRAL_AREA_NOTIFY'),
           ('ADMIN','HEALTH_POST_NOTIFY'),('ADMIN','COUNTER_REFERRAL_MANAGE'),('ADMIN','JOURNEY_READ'),
           ('ADMIN','CHECKLIST_WRITE'),('ADMIN','GUARDIAN_REMIND'),('ADMIN','GUARDIAN_ACCESS_MANAGE'),
+          ('ESPECIALISTA_PEDIATRIA','PATIENT_COHORT_READ'),
           ('ESPECIALISTA_PEDIATRIA','PATIENT_READ'),('ESPECIALISTA_PEDIATRIA','PATIENT_WRITE'),
           ('ESPECIALISTA_PEDIATRIA','REPORT_READ'),('ESPECIALISTA_PEDIATRIA','REFERRAL_AREA_NOTIFY'),
           ('AREA_REFERENCIAS','PATIENT_READ'),('AREA_REFERENCIAS','REFERRAL_READ'),
@@ -101,8 +121,10 @@ export class SeedTransitionData1786325858482 implements MigrationInterface {
           -- 'operador' (rol OPER, ya existía en SeedInitialData) ve el
           -- tablero y el panel pero no puede actuar sobre ningún caso —
           -- para probar que las acciones desaparecen sin el permiso y que
-          -- el servidor las rechazaría igual con 403.
-          ('OPER','PATIENT_READ'),('OPER','REPORT_READ')
+          -- el servidor las rechazaría igual con 403. Nunca tuvo un uso
+          -- legítimo para "PATIENT_READ" puntual (eso es del dominio de
+          -- consentimiento) — por eso acá solo lleva el de cohorte.
+          ('OPER','PATIENT_COHORT_READ'),('OPER','REPORT_READ')
       ) AS v("RoleCode","PermissionCode")
       JOIN "Role" r ON r."Code" = v."RoleCode"
       JOIN "Permission" p ON p."Code" = v."PermissionCode"
@@ -146,6 +168,23 @@ export class SeedTransitionData1786325858482 implements MigrationInterface {
       FROM (SELECT "Id" FROM "User" WHERE "UserName" = 'inactivo1') AS u
       CROSS JOIN (SELECT "Id" FROM "Role" WHERE "Code" = 'ESPECIALISTA_PEDIATRIA') AS r
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
+    // 5c) Usuario demo SIN ROL — el botón de acceso rápido "sinpermisos"
+    // de la pantalla de login del front (iCode-front/src/presentation/
+    // pages/login.page.tsx) ya lo anuncia con el hint "recibe 403 en la
+    // lista": loguea bien, pero al no tener ningún "UserRole" no tiene
+    // ningún permiso — sirve para probar que el back rechaza con 403,
+    // no solo que el front oculta el botón.
+    await queryRunner.query(`
+      INSERT INTO "User"
+      ("UserName","Email","FirstName","LastName","PasswordHash","PasswordSalt","SecurityStamp","State","Photo","CreatedAt","CreatedById")
+      SELECT
+        'sinpermisos','sinpermisos@example.com','Sin Permisos','Ficticio',
+        decode('b90efe621fc76a08a09f6e7a9c5c8db958cad73c444208ec5cdb9e99d5aabb90','hex'),
+        decode('821eabeec79a13d89640bf8740cab629','hex'),
+        gen_random_uuid(), true, '', CURRENT_TIMESTAMP, adm."Id"
+      FROM (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
 
     // 6) ROLES nuevos sobre usuarios existentes + el usuario nuevo
@@ -386,19 +425,19 @@ export class SeedTransitionData1786325858482 implements MigrationInterface {
       )
     `);
     await queryRunner.query(
-      `DELETE FROM "User" WHERE "UserName" IN ('referencias1', 'inactivo1')`,
+      `DELETE FROM "User" WHERE "UserName" IN ('referencias1', 'inactivo1', 'sinpermisos')`,
     );
-    // Grant a OPER sobre permisos que YA existían antes de esta migración
-    // (PATIENT_READ/REPORT_READ) — no entran en el DELETE genérico de abajo,
-    // que solo apunta a los 9 permisos nuevos.
+    // Grant a OPER sobre REPORT_READ, que YA existía antes de esta
+    // migración — no entra en el DELETE genérico de abajo, que solo
+    // apunta a los 10 permisos nuevos (PATIENT_COHORT_READ incluido).
     await queryRunner.query(`
       DELETE FROM "RolePermission" WHERE "RoleId" = (SELECT "Id" FROM "Role" WHERE "Code" = 'OPER')
-        AND "PermissionId" IN (SELECT "Id" FROM "Permission" WHERE "Code" IN ('PATIENT_READ', 'REPORT_READ'))
+        AND "PermissionId" IN (SELECT "Id" FROM "Permission" WHERE "Code" = 'REPORT_READ')
     `);
     await queryRunner.query(`
       DELETE FROM "RolePermission" WHERE "PermissionId" IN (
         SELECT "Id" FROM "Permission" WHERE "Code" IN (
-          'REPORT_READ','REFERRAL_READ','REFERRAL_AREA_NOTIFY','HEALTH_POST_NOTIFY',
+          'PATIENT_COHORT_READ','REPORT_READ','REFERRAL_READ','REFERRAL_AREA_NOTIFY','HEALTH_POST_NOTIFY',
           'COUNTER_REFERRAL_MANAGE','JOURNEY_READ','CHECKLIST_WRITE','GUARDIAN_REMIND','GUARDIAN_ACCESS_MANAGE'
         )
       )
@@ -408,7 +447,7 @@ export class SeedTransitionData1786325858482 implements MigrationInterface {
     `);
     await queryRunner.query(`
       DELETE FROM "Permission" WHERE "Code" IN (
-        'REPORT_READ','REFERRAL_READ','REFERRAL_AREA_NOTIFY','HEALTH_POST_NOTIFY',
+        'PATIENT_COHORT_READ','REPORT_READ','REFERRAL_READ','REFERRAL_AREA_NOTIFY','HEALTH_POST_NOTIFY',
         'COUNTER_REFERRAL_MANAGE','JOURNEY_READ','CHECKLIST_WRITE','GUARDIAN_REMIND','GUARDIAN_ACCESS_MANAGE'
       )
     `);

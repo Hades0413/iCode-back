@@ -7,11 +7,15 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { CounterReferral } from '../../../domain/entities/referrals/counter-referral.entity';
+import { User } from '../../../domain/entities/user.entity';
 import { CounterReferralStatus } from '../../../domain/enums/counter-referral-status.enum';
 import { PatientTransitionService } from '../transition/patient-transition.service';
 import { CounterReferralStorageService } from './counter-referral-storage.service';
 import { UploadCounterReferralDto } from '../../dto/referrals/upload-counter-referral.dto';
-import { CounterReferralResponseDto } from '../../dto/referrals/counter-referral-response.dto';
+import {
+  CounterReferralResponseDto,
+  CounterReferralResultDto,
+} from '../../dto/referrals/counter-referral-response.dto';
 import { PatientTransitionResponseDto } from '../../dto/transition/patient-transition-response.dto';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -28,13 +32,20 @@ export class CounterReferralService {
   constructor(
     @InjectRepository(CounterReferral)
     private readonly counterReferralRepository: Repository<CounterReferral>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly patientTransitionService: PatientTransitionService,
     private readonly storageService: CounterReferralStorageService,
   ) {}
 
   async findByPatient(patientId: number): Promise<CounterReferralResponseDto> {
     const counterReferral = await this.getOrFail(patientId);
-    return this.toResponseDto(counterReferral);
+    const nameById = await this.resolveNames(
+      counterReferral.sentById !== null
+        ? [counterReferral.uploadedById, counterReferral.sentById]
+        : [counterReferral.uploadedById],
+    );
+    return this.toResponseDto(counterReferral, nameById);
   }
 
   /** GET /referrals/counter-queue — una tarjeta por cada paciente que ya cumplió 18. */
@@ -51,13 +62,18 @@ export class CounterReferralService {
     const counterReferrals = await this.counterReferralRepository.find({
       where: { patientId: In(patients.map((p) => p.patientId)) },
     });
+    const nameById = await this.resolveNames(
+      counterReferrals.flatMap((c) =>
+        c.sentById !== null ? [c.uploadedById, c.sentById] : [c.uploadedById],
+      ),
+    );
     return patients.map((patient) => {
       const cr = counterReferrals.find(
         (c) => c.patientId === patient.patientId,
       );
       return {
         patient,
-        counterReferral: cr ? this.toResponseDto(cr) : null,
+        counterReferral: cr ? this.toResponseDto(cr, nameById) : null,
       };
     });
   }
@@ -67,7 +83,7 @@ export class CounterReferralService {
     dto: UploadCounterReferralDto,
     file: { originalname: string; size: number; buffer: Buffer },
     currentUserId: number,
-  ): Promise<CounterReferralResponseDto> {
+  ): Promise<CounterReferralResultDto> {
     if (!file) {
       throw new BadRequestException('Falta el archivo de la carta');
     }
@@ -138,13 +154,13 @@ export class CounterReferralService {
       CounterReferralStatus.UPLOADED,
       currentUserId,
     );
-    return this.toResponseDto(saved);
+    return this.toResultDto(patientId, saved);
   }
 
   async deliver(
     patientId: number,
     currentUserId: number,
-  ): Promise<CounterReferralResponseDto> {
+  ): Promise<CounterReferralResultDto> {
     const counterReferral = await this.getOrFail(patientId);
     const context =
       await this.patientTransitionService.getRuleContext(patientId);
@@ -168,7 +184,7 @@ export class CounterReferralService {
       CounterReferralStatus.SENT,
       currentUserId,
     );
-    return this.toResponseDto(saved);
+    return this.toResultDto(patientId, saved);
   }
 
   private async getOrFail(patientId: number): Promise<CounterReferral> {
@@ -188,19 +204,53 @@ export class CounterReferralService {
     return lastDot === -1 ? '' : fileName.slice(lastDot).toLowerCase();
   }
 
+  private async resolveNames(userIds: number[]): Promise<Map<number, string>> {
+    const ids = [...new Set(userIds)];
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const users = await this.userRepository.find({ where: { id: In(ids) } });
+    return new Map(
+      users.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()]),
+    );
+  }
+
+  /** Junta el documento con la fila del paciente — ver CounterReferralResultDto sobre por qué van juntos. */
+  private async toResultDto(
+    patientId: number,
+    counterReferral: CounterReferral,
+  ): Promise<CounterReferralResultDto> {
+    const [patient, nameById] = await Promise.all([
+      this.patientTransitionService.findDetail(patientId),
+      this.resolveNames(
+        counterReferral.sentById !== null
+          ? [counterReferral.uploadedById, counterReferral.sentById]
+          : [counterReferral.uploadedById],
+      ),
+    ]);
+    return {
+      patient,
+      counterReferral: this.toResponseDto(counterReferral, nameById),
+    };
+  }
+
   private toResponseDto(
     counterReferral: CounterReferral,
+    nameById?: Map<number, string>,
   ): CounterReferralResponseDto {
     return {
-      patientId: counterReferral.patientId,
+      patientId: String(counterReferral.patientId),
       status: counterReferral.status,
       fileName: counterReferral.fileName,
       format: counterReferral.format,
       fileSize: counterReferral.fileSize,
       code: counterReferral.code,
-      uploadedById: counterReferral.uploadedById,
+      uploadedBy: nameById?.get(counterReferral.uploadedById) ?? '',
       uploadedAt: counterReferral.uploadedAt.toISOString(),
-      sentById: counterReferral.sentById,
+      sentBy:
+        counterReferral.sentById !== null
+          ? (nameById?.get(counterReferral.sentById) ?? null)
+          : null,
       sentAt: counterReferral.sentAt
         ? counterReferral.sentAt.toISOString()
         : null,

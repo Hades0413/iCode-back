@@ -4,14 +4,18 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { TransitionSummary } from '../../../domain/entities/clinical/transition-summary.entity';
+import { User } from '../../../domain/entities/user.entity';
 import { ClinicalSummaryStatus } from '../../../domain/enums/clinical-summary-status.enum';
 import { SummaryAuthorKind } from '../../../domain/enums/summary-author-kind.enum';
 import { TransitionState } from '../../../domain/enums/transition-state.enum';
 import { PatientTransitionService } from '../transition/patient-transition.service';
 import { UpdateTransitionSummaryDto } from '../../dto/clinical/update-transition-summary.dto';
-import { TransitionSummaryResponseDto } from '../../dto/clinical/transition-summary-response.dto';
+import {
+  ClinicalSummaryResultDto,
+  TransitionSummaryResponseDto,
+} from '../../dto/clinical/transition-summary-response.dto';
 
 /** Habilitado desde 3 meses antes de los 18 — ver PUENTE18_FRONTEND_INTEGRATION.md, sección 3. */
 const ENABLE_MONTHS_BEFORE_18 = 3;
@@ -59,6 +63,8 @@ export class TransitionSummaryService {
   constructor(
     @InjectRepository(TransitionSummary)
     private readonly summaryRepository: Repository<TransitionSummary>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly patientTransitionService: PatientTransitionService,
   ) {}
 
@@ -72,7 +78,7 @@ export class TransitionSummaryService {
   async generate(
     patientId: number,
     currentUserId: number,
-  ): Promise<TransitionSummaryResponseDto> {
+  ): Promise<ClinicalSummaryResultDto> {
     await this.patientTransitionService.assertSpecialtyMatches(
       patientId,
       currentUserId,
@@ -114,7 +120,7 @@ export class TransitionSummaryService {
       existing.updatedAt = new Date();
       existing.updatedById = currentUserId;
       const saved = await this.summaryRepository.save(existing);
-      return this.toResponseDto(saved);
+      return this.toResultDto(patientId, saved);
     }
 
     const { sections, pendingChecks } =
@@ -143,14 +149,14 @@ export class TransitionSummaryService {
         currentUserId,
       );
     }
-    return this.toResponseDto(saved);
+    return this.toResultDto(patientId, saved);
   }
 
   async update(
     patientId: number,
     dto: UpdateTransitionSummaryDto,
     currentUserId: number,
-  ): Promise<TransitionSummaryResponseDto> {
+  ): Promise<ClinicalSummaryResultDto> {
     await this.patientTransitionService.assertSpecialtyMatches(
       patientId,
       currentUserId,
@@ -191,13 +197,13 @@ export class TransitionSummaryService {
     summary.updatedAt = new Date();
     summary.updatedById = currentUserId;
     const saved = await this.summaryRepository.save(summary);
-    return this.toResponseDto(saved);
+    return this.toResultDto(patientId, saved);
   }
 
   async approve(
     patientId: number,
     currentUserId: number,
-  ): Promise<TransitionSummaryResponseDto> {
+  ): Promise<ClinicalSummaryResultDto> {
     await this.patientTransitionService.assertSpecialtyMatches(
       patientId,
       currentUserId,
@@ -227,7 +233,7 @@ export class TransitionSummaryService {
     summary.updatedAt = new Date();
     summary.updatedById = currentUserId;
     const saved = await this.summaryRepository.save(summary);
-    return this.toResponseDto(saved);
+    return this.toResultDto(patientId, saved);
   }
 
   private async getSummaryOrFail(
@@ -281,19 +287,48 @@ export class TransitionSummaryService {
     return { sections, pendingChecks };
   }
 
-  private toResponseDto(
+  /** Junta el documento con la fila del paciente — ver ClinicalSummaryResultDto sobre por qué van juntos. */
+  private async toResultDto(
+    patientId: number,
     summary: TransitionSummary,
-  ): TransitionSummaryResponseDto {
+  ): Promise<ClinicalSummaryResultDto> {
+    const [patient, summaryDto] = await Promise.all([
+      this.patientTransitionService.findDetail(patientId),
+      this.toResponseDto(summary),
+    ]);
+    return { patient, summary: summaryDto };
+  }
+
+  private async toResponseDto(
+    summary: TransitionSummary,
+  ): Promise<TransitionSummaryResponseDto> {
+    const userIds = [summary.editedById, summary.approvedById].filter(
+      (id): id is number => id !== null,
+    );
+    const users =
+      userIds.length > 0
+        ? await this.userRepository.find({ where: { id: In(userIds) } })
+        : [];
+    const nameById = new Map(
+      users.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()]),
+    );
+
     return {
-      patientId: summary.patientId,
+      patientId: String(summary.patientId),
       status: summary.status,
       sections: summary.sections,
       pendingChecks: summary.pendingChecks ?? [],
       draftedBy: { kind: summary.draftedByKind, name: summary.draftedByName },
       draftedAt: summary.draftedAt.toISOString(),
-      editedById: summary.editedById,
+      editedBy:
+        summary.editedById !== null
+          ? (nameById.get(summary.editedById) ?? null)
+          : null,
       editedAt: summary.editedAt ? summary.editedAt.toISOString() : null,
-      approvedById: summary.approvedById,
+      approvedBy:
+        summary.approvedById !== null
+          ? (nameById.get(summary.approvedById) ?? null)
+          : null,
       approvedAt: summary.approvedAt ? summary.approvedAt.toISOString() : null,
     };
   }

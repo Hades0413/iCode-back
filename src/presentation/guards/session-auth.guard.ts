@@ -11,6 +11,7 @@ import { DataSource } from 'typeorm';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { hashSessionToken } from '../../common/utils/session-token.util';
+import { SESSION_COOKIE_NAME } from '../../common/constants/security.constants';
 
 interface SessionRow {
   SessionId: string;
@@ -48,9 +49,11 @@ export class SessionAuthGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<Request>();
-    const token = extractBearerToken(request);
+    const token = extractSessionToken(request);
     if (!token) {
-      throw new UnauthorizedException('Falta el header Authorization');
+      throw new UnauthorizedException(
+        'Falta el header Authorization o la cookie de sesión',
+      );
     }
 
     const tokenHash = hashSessionToken(token);
@@ -93,10 +96,18 @@ export class SessionAuthGuard implements CanActivate {
   }
 }
 
-function extractBearerToken(request: Request): string | undefined {
+/**
+ * El header gana si viene (Swagger, Postman, un futuro cliente móvil sin
+ * cookie jar); si no, cae a la cookie httpOnly que puso
+ * `POST /auth/login` — la que usa iCode-front. Ninguna reemplaza a la
+ * otra, ver SESSION_COOKIE_NAME.
+ */
+function extractSessionToken(request: Request): string | undefined {
   const header = request.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
-    return undefined;
+  if (header?.startsWith('Bearer ')) {
+    return header.slice('Bearer '.length).trim();
   }
-  return header.slice('Bearer '.length).trim();
+  return (request.cookies as Record<string, string> | undefined)?.[
+    SESSION_COOKIE_NAME
+  ];
 }
