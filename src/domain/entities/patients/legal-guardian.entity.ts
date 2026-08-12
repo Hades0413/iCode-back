@@ -38,4 +38,14 @@ export class LegalGuardian extends AuditableEntity {
     nullable: true,
   })
   deactivatedAt: Date | null;
+
+  /**
+   * Distinto de "IsActive": ese lo apaga el sistema al cumplir 18
+   * (TitleTransferService), este lo decide el propio paciente en
+   * cualquier momento vía "PUT /journey/guardian-access" (ver
+   * JourneyService) — puede revocarlo y devolverlo cuantas veces quiera,
+   * siempre que el tutor siga "IsActive".
+   */
+  @Column({ name: 'HasJourneyAccess', type: 'boolean' })
+  hasJourneyAccess: boolean;
 }

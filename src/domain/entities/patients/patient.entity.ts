@@ -1,5 +1,6 @@
 import { Column, Entity } from 'typeorm';
 import { AuditableEntity } from '../base/auditable.entity';
+import { Sex } from '../../enums/sex.enum';
 
 /**
  * El sujeto clínico, NO una cuenta de acceso: un paciente puede existir
@@ -31,6 +32,10 @@ export class Patient extends AuditableEntity {
 
   @Column({ name: 'BloodType', type: 'varchar', length: 5, nullable: true })
   bloodType: string | null;
+
+  /** Agregado para el dominio de transición pediátrico→adultos (ver PatientTransition) — dato de identidad genuino, a diferencia de "MedicalRecordNumber" que sí es propio de ese dominio. */
+  @Column({ name: 'Sex', type: 'varchar', length: 1, nullable: true })
+  sex: Sex | null;
 
   @Column({ name: 'UserId', type: 'int', nullable: true })
   userId: number | null;

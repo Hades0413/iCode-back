@@ -28,6 +28,15 @@ export class HealthFacility extends AuditableEntity {
   @Column({ name: 'Address', type: 'varchar', length: 300, nullable: true })
   address: string | null;
 
+  /**
+   * Agregado para poder usar este mismo catálogo como "posta del
+   * distrito" en el dominio de transición (ver PatientTransition —
+   * ReferralService asigna la posta comparando esto contra el domicilio
+   * del paciente). No aplica a una IPRESS que solo otorga consentimiento.
+   */
+  @Column({ name: 'District', type: 'varchar', length: 100, nullable: true })
+  district: string | null;
+
   @Column({ name: 'State', type: 'boolean' })
   state: boolean;
 }

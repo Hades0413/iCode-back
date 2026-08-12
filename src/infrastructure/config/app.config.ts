@@ -13,4 +13,6 @@ export default registerAs('app', () => ({
     process.env.ONLINE_THRESHOLD_MINUTES ?? '15',
     10,
   ),
+  counterReferralStoragePath:
+    process.env.COUNTER_REFERRAL_STORAGE_PATH ?? './storage/counter-referrals',
 }));

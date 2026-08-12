@@ -46,6 +46,58 @@ export class TitleTransferService {
   }
 
   /**
+   * "17a 11m" — la edad actual ya formateada. Usado por el dominio de
+   * transición (ver PatientTransitionService) para no reimplementar el
+   * cálculo de edad en dos lugares — la única fuente de verdad para "qué
+   * edad tiene" sigue siendo "DateOfBirth", nunca una columna guardada.
+   */
+  formatAge(dateOfBirth: string): string {
+    const dob = new Date(dateOfBirth);
+    const now = new Date();
+    let years = now.getFullYear() - dob.getFullYear();
+    let months = now.getMonth() - dob.getMonth();
+    if (now.getDate() < dob.getDate()) {
+      months -= 1;
+    }
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+    return `${years}a ${months}m`;
+  }
+
+  /**
+   * Positivo = faltan N meses para los 18; 0 o negativo = ya cumplió
+   * hace |N| meses. Base de las ventanas de tiempo del dominio de
+   * transición (habilitación a los 3 meses, aviso a la posta a los 2,
+   * firma en el último mes — ver PUENTE18_FRONTEND_INTEGRATION.md).
+   */
+  monthsToEighteen(dateOfBirth: string): number {
+    const dob = new Date(dateOfBirth);
+    const eighteenthBirthday = new Date(dob);
+    eighteenthBirthday.setFullYear(dob.getFullYear() + 18);
+    const now = new Date();
+    let months =
+      (eighteenthBirthday.getFullYear() - now.getFullYear()) * 12 +
+      (eighteenthBirthday.getMonth() - now.getMonth());
+    if (eighteenthBirthday.getDate() < now.getDate()) {
+      months -= 1;
+    }
+    return months;
+  }
+
+  /** null si todavía no cumplió 18. */
+  turnedEighteenAt(dateOfBirth: string): string | null {
+    if (!this.isAdult(dateOfBirth)) {
+      return null;
+    }
+    const dob = new Date(dateOfBirth);
+    const eighteenthBirthday = new Date(dob);
+    eighteenthBirthday.setFullYear(dob.getFullYear() + 18);
+    return eighteenthBirthday.toISOString().slice(0, 10);
+  }
+
+  /**
    * null significa "nadie puede autorizar accesos ahora mismo" — un
    * paciente adulto que todavía no vinculó su propio "User", o un menor
    * sin ningún tutor activo. ConsentService debe tratar eso como bloqueo,

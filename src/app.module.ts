@@ -12,6 +12,11 @@ import { AuthModule } from './auth.module';
 import { PatientsModule } from './patients.module';
 import { ClinicalRecordsModule } from './clinical-records.module';
 import { ConsentModule } from './consent.module';
+import { TransitionModule } from './transition.module';
+import { TransitionSummaryModule } from './transition-summary.module';
+import { ReferralModule } from './referral.module';
+import { CounterReferralModule } from './counter-referral.module';
+import { JourneyModule } from './journey.module';
 import { SanitizeMiddleware } from './common/middlewares/sanitize.middleware';
 import { EncryptResponseInterceptor } from './common/interceptors/encrypt-response.interceptor';
 import appConfig from './infrastructure/config/app.config';
@@ -71,6 +76,11 @@ import { PermissionGuard } from './presentation/guards/permission.guard';
     PatientsModule,
     ClinicalRecordsModule,
     ConsentModule,
+    TransitionModule,
+    TransitionSummaryModule,
+    ReferralModule,
+    CounterReferralModule,
+    JourneyModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

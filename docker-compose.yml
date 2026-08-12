@@ -44,9 +44,16 @@ services:
       # Dentro de la red de docker-compose, Postgres vive en el hostname
       # del servicio, no en "localhost" — pisa lo que diga el .env.
       DATABASE_HOST: postgres
+    volumes:
+      # Puente 18+: binario de la carta de contrarreferencia — disco
+      # local en un volumen, no S3 (ver .env.example y
+      # PUENTE18_FRONTEND_INTEGRATION.md). La ruta de adentro coincide con
+      # el default de COUNTER_REFERRAL_STORAGE_PATH.
+      - icode_counter_referrals:/app/storage/counter-referrals
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   icode_postgres_data:
+  icode_counter_referrals:

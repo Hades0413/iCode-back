@@ -77,6 +77,10 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Dumps de "make db-backup" — pueden tener datos reales de usuarios.
 /backups/
 
+# Puente 18+: binarios de cartas de contrarreferencia subidas en dev
+# (COUNTER_REFERRAL_STORAGE_PATH, ver .env.example) — nunca se commitean.
+/storage/
+
 # =========================
 # Docker
 # =========================

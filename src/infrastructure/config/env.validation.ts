@@ -48,4 +48,10 @@ export const envValidationSchema = Joi.object({
   // deslizante de 30 días, "sesión activa" no significa "usando la app en
   // este momento" — esto sí.
   ONLINE_THRESHOLD_MINUTES: Joi.number().default(15),
+
+  // Puente 18+ — carpeta (volumen Docker) donde se guarda el binario de la
+  // carta de contrarreferencia. Ver PUENTE18_FRONTEND_INTEGRATION.md.
+  COUNTER_REFERRAL_STORAGE_PATH: Joi.string().default(
+    './storage/counter-referrals',
+  ),
 });
