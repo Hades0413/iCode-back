@@ -26,11 +26,12 @@ services:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/ssl:/etc/nginx/ssl:ro
     ports:
-      # Puerto del HOST configurable (default 80/443) — hace falta en un
-      # servidor que ya tiene otro proyecto usando esos puertos. El nginx
-      # de ADENTRO del contenedor sigue escuchando 80/443 siempre; esto
-      # solo cambia a qué puerto del host se mapean. Ver .env.example.
-      - '${HTTP_PORT:-80}:80'
-      - '${HTTPS_PORT:-443}:443'
+      # Puerto e interfaz del HOST configurables (default 0.0.0.0:80/443,
+      # el caso común de un VPS con IP pública propia). Si algo local
+      # (ej. un túnel de Cloudflare) es el único que necesita llegar,
+      # poné BIND_ADDR=127.0.0.1 en .env.prod. El nginx de ADENTRO del
+      # contenedor sigue escuchando 80/443 siempre. Ver .env.example.
+      - '${BIND_ADDR:-0.0.0.0}:${HTTP_PORT:-80}:80'
+      - '${BIND_ADDR:-0.0.0.0}:${HTTPS_PORT:-443}:443'
     depends_on:
       - app
