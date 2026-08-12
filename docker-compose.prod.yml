@@ -3,6 +3,14 @@
 # nunca se suma solo. Agrega nginx (SSL + headers + rate limit de borde)
 # delante de la app, que acá no expone el puerto 3000 al host directamente.
 services:
+  # Solo en loopback: "make migration-run-prod" corre en el HOST (necesita
+  # ts-node + el código fuente, que la imagen "runtime" no tiene — ver
+  # docker/Dockerfile), así que necesita alcanzar Postgres desde ahí. Nunca
+  # en 0.0.0.0: la base no se expone a la red, solo a este mismo servidor.
+  postgres:
+    ports:
+      - '127.0.0.1:${DATABASE_PORT:-5432}:5432'
+
   app:
     build:
       target: runtime
