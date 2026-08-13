@@ -202,10 +202,15 @@ export class SeedBulkDemoData1786325859482 implements MigrationInterface {
       ['70000013', 'DRAFT', 'Sebastián', 'Diabetes mellitus tipo 1 en control'],
       ['70000014', 'DRAFT', 'Luciana', 'Síndrome nefrótico en remisión'],
       ['70000015', 'APPROVED', 'Diego', 'Asma persistente moderada'],
-      ['70000016', 'APPROVED', 'Antonella', 'Anemia hemolítica autoinmune'],
+      // 70000016 queda A PROPÓSITO sin ninguna fila acá ("NONE" — todavía
+      // ni el borrador se generó): es de los 4 dentro de la ventana real
+      // de 3 meses (ENABLED_MONTHS_BEFORE_18 en transition.rules.ts del
+      // front, distinto del "9 meses" que dice el copy de la pantalla) y
+      // hace falta al menos uno "sin generar" para que el KPI "Sin
+      // historia clínica firmada" no quede en 0.
       [
         '70000017',
-        'APPROVED',
+        'DRAFT',
         'Joaquín',
         'Artritis idiopática juvenil poliarticular',
       ],
