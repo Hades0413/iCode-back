@@ -370,6 +370,39 @@ export class SeedTransitionData1786325858482 implements MigrationInterface {
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
 
+    // 14b) "Mi recorrido" de 70000002 (ya adulto, titularidad propia) — a
+    // este paciente nunca se le había cargado nada de esto: "Mi recorrido"
+    // sigue sirviendo después de los 18, no es solo para el tramo pediátrico.
+    // Sin JourneyMessage: no tiene ningún tutor activo (ver paso 21 de
+    // SeedInitialData), no hay quién le mande un recordatorio.
+    await queryRunner.query(`
+      INSERT INTO "JourneyChecklistItem" ("PatientId","Title","Detail","PendingLabel","Done","DisplayOrder","CreatedById")
+      SELECT pat."Id", v."Title", v."Detail", v."PendingLabel", v."Done"::boolean, v."DisplayOrder"::int, adm."Id"
+      FROM (VALUES
+        ('70000002','Guardar mi historia clínica','Ya está firmada — guardala en un lugar seguro.',NULL,true,1),
+        ('70000002','Anotar mis medicamentos','Llevá la lista a cada consulta nueva.',NULL,true,2),
+        ('70000002','Anotar mis preguntas para el especialista','Lo que quieras preguntar en la próxima consulta.','Pendiente',false,3)
+      ) AS v("DocumentNumber","Title","Detail","PendingLabel","Done","DisplayOrder")
+      JOIN "Patient" pat ON pat."DocumentNumber" = v."DocumentNumber"
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    await queryRunner.query(`
+      INSERT INTO "JourneyMedication" ("PatientId","Initial","Name","Dose","Purpose","DisplayOrder","CreatedById")
+      SELECT pat."Id", v."Initial", v."Name", v."Dose", v."Purpose", v."DisplayOrder"::int, adm."Id"
+      FROM (VALUES
+        ('70000002','E','Enalapril','5mg, una vez al día','Soporte cardíaco',1),
+        ('70000002','A','Ácido acetilsalicílico','100mg, una vez al día','Prevención',2)
+      ) AS v("DocumentNumber","Initial","Name","Dose","Purpose","DisplayOrder")
+      JOIN "Patient" pat ON pat."DocumentNumber" = v."DocumentNumber"
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    await queryRunner.query(`
+      INSERT INTO "JourneyContact" ("PatientId","Role","Name","Detail","DisplayOrder","CreatedById")
+      SELECT pat."Id", 'Especialista', 'Internista Ficticio Uno', '01-500-0002', 1, adm."Id"
+      FROM (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000002') AS pat
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+
     // 15) Guía de preguntas frecuentes (global, no por paciente).
     await queryRunner.query(`
       INSERT INTO "JourneyGuideEntry" ("Question","Answer","DisplayOrder","CreatedById")
@@ -398,6 +431,15 @@ export class SeedTransitionData1786325858482 implements MigrationInterface {
     `);
     await queryRunner.query(`
       DELETE FROM "JourneyChecklistItem" WHERE "PatientId" = (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000001')
+    `);
+    await queryRunner.query(`
+      DELETE FROM "JourneyContact" WHERE "PatientId" = (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000002')
+    `);
+    await queryRunner.query(`
+      DELETE FROM "JourneyMedication" WHERE "PatientId" = (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000002')
+    `);
+    await queryRunner.query(`
+      DELETE FROM "JourneyChecklistItem" WHERE "PatientId" = (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000002')
     `);
     await queryRunner.query(`
       DELETE FROM "TransitionSummary" WHERE "PatientId" = (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '70000002')
