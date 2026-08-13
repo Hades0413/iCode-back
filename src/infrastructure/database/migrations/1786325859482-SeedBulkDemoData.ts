@@ -242,7 +242,7 @@ export class SeedBulkDemoData1786325859482 implements MigrationInterface {
           body: 'Continuar el seguimiento en el hospital de adultos que le asigne la posta.',
           hint: '',
         },
-      ]).replace(/'/g, "''");
+      ]).replaceAll("'", "''");
       await queryRunner.query(`
         INSERT INTO "TransitionSummary"
           ("PatientId","Status","Sections","PendingChecks","DraftedByKind","DraftedByName","DraftedAt","EditedById","EditedAt","CreatedById")
@@ -402,12 +402,112 @@ export class SeedBulkDemoData1786325859482 implements MigrationInterface {
       JOIN "User" tut ON tut."UserName" = v."TutorUserName"
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
+
+    // ============================================================
+    // 10) 18 menores más (70000030-70000047), TODOS dentro de la ventana
+    // real de 3 meses (ENABLED_MONTHS_BEFORE_18) y SIN historia aprobada
+    // — junto con 70000016/70000017 del paso 6, completan 20 casos reales
+    // de "Sin historia clínica firmada" (9 sin generar + 9 en borrador).
+    // Sin guardián ni contenido de "Mi recorrido": no hacen falta para
+    // este KPI, que solo mira PatientTransition + TransitionSummary.
+    // ============================================================
+    await queryRunner.query(`
+      INSERT INTO "Patient" ("DocumentType","DocumentNumber","FirstName","LastName","DateOfBirth","BloodType","Sex","CreatedById")
+      SELECT 'DNI', v."DocumentNumber", v."FirstName", v."LastName",
+        CURRENT_DATE - v."Age"::interval, v."BloodType", v."Sex", adm."Id"
+      FROM (VALUES
+        ('70000030','Ximena','Ficticio V01','17 years 9 months','O+','F'),
+        ('70000031','Adrián','Ficticio V02','17 years 10 months','A+','M'),
+        ('70000032','Paula','Ficticio V03','17 years 11 months','B+','F'),
+        ('70000033','Iker','Ficticio V04','17 years 9 months','O-','M'),
+        ('70000034','Mariana','Ficticio V05','17 years 10 months','AB+','F'),
+        ('70000035','Santiago','Ficticio V06','17 years 11 months','A-','M'),
+        ('70000036','Abril','Ficticio V07','17 years 9 months','O+','F'),
+        ('70000037','Máximo','Ficticio V08','17 years 10 months','B-','M'),
+        ('70000038','Constanza','Ficticio V09','17 years 11 months','O+','F'),
+        ('70000039','Agustín','Ficticio V10','17 years 9 months','AB-','M'),
+        ('70000040','Julieta','Ficticio V11','17 years 10 months','O+','F'),
+        ('70000041','Thiago','Ficticio V12','17 years 11 months','A+','M'),
+        ('70000042','Milagros','Ficticio V13','17 years 9 months','B+','F'),
+        ('70000043','Benjamín','Ficticio V14','17 years 10 months','O-','M'),
+        ('70000044','Alessandra','Ficticio V15','17 years 11 months','AB+','F'),
+        ('70000045','Cristóbal','Ficticio V16','17 years 9 months','A-','M'),
+        ('70000046','Zoe','Ficticio V17','17 years 10 months','O+','F'),
+        ('70000047','Ignacio','Ficticio V18','17 years 11 months','B-','M')
+      ) AS v("DocumentNumber","FirstName","LastName","Age","BloodType","Sex")
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    await queryRunner.query(`
+      INSERT INTO "PatientTransition"
+        ("PatientId","State","MedicalRecordNumber","PrimaryDiagnosis","SpecialtyId","AttendingStaffId","District","CounterReferralStatus","CreatedById")
+      SELECT pat."Id", v."State", v."MedicalRecordNumber", v."PrimaryDiagnosis", spec."Id", staff."Id", v."District", 'NONE', adm."Id"
+      FROM (VALUES
+        -- Los primeros 9 todavía no tienen ni el borrador ("sin generar").
+        ('70000030','PENDING','HC-300030','Leucemia linfoblástica aguda en remisión','ONCO_PED','Comas'),
+        ('70000031','PENDING','HC-300031','Arritmia supraventricular controlada','CARDIO_PED','San Juan de Lurigancho'),
+        ('70000032','PENDING','HC-300032','Epilepsia focal en tratamiento','NEURO_PED','Los Olivos'),
+        ('70000033','PENDING','HC-300033','Diabetes mellitus tipo 1 en control','ENDO_PED','Villa El Salvador'),
+        ('70000034','PENDING','HC-300034','Síndrome nefrótico en remisión','NEFRO_PED','Ate'),
+        ('70000035','PENDING','HC-300035','Asma persistente moderada','NEUMO_PED','San Juan de Miraflores'),
+        ('70000036','PENDING','HC-300036','Anemia hemolítica autoinmune','HEMATO_PED','Independencia'),
+        ('70000037','PENDING','HC-300037','Artritis idiopática juvenil poliarticular','REUMATO_PED','Carabayllo'),
+        ('70000038','PENDING','HC-300038','Tumor de Wilms operado','ONCO_PED','Puente Piedra'),
+        -- Los últimos 9 ya tienen un borrador de la IA, esperando la firma.
+        ('70000039','IN_PREPARATION','HC-300039','Cardiopatía congénita en seguimiento','CARDIO_PED','Villa María del Triunfo'),
+        ('70000040','IN_PREPARATION','HC-300040','Parálisis cerebral leve','NEURO_PED','Comas'),
+        ('70000041','IN_PREPARATION','HC-300041','Hipotiroidismo congénito','ENDO_PED','San Juan de Lurigancho'),
+        ('70000042','IN_PREPARATION','HC-300042','Insuficiencia renal crónica estadio 2','NEFRO_PED','Los Olivos'),
+        ('70000043','IN_PREPARATION','HC-300043','Fibrosis quística en seguimiento','NEUMO_PED','Villa El Salvador'),
+        ('70000044','IN_PREPARATION','HC-300044','Hemofilia tipo A leve','HEMATO_PED','Ate'),
+        ('70000045','IN_PREPARATION','HC-300045','Lupus eritematoso sistémico juvenil','REUMATO_PED','San Juan de Miraflores'),
+        ('70000046','IN_PREPARATION','HC-300046','Linfoma de Hodgkin en tratamiento','ONCO_PED','Independencia'),
+        ('70000047','IN_PREPARATION','HC-300047','Arritmia supraventricular controlada','CARDIO_PED','Carabayllo')
+      ) AS v("DocumentNumber","State","MedicalRecordNumber","PrimaryDiagnosis","SpecialtyCode","District")
+      JOIN "Patient" pat ON pat."DocumentNumber" = v."DocumentNumber"
+      JOIN "MedicalSpecialty" spec ON spec."Code" = v."SpecialtyCode"
+      CROSS JOIN (SELECT "Id" FROM "HealthFacilityStaff" WHERE "UserId" = (SELECT "Id" FROM "User" WHERE "UserName" = 'pediatra1')) AS staff
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    const draftDocs = Array.from({ length: 9 }, (_, i) => `700000${39 + i}`);
+    for (const doc of draftDocs) {
+      const sections = JSON.stringify([
+        {
+          id: 'identificacion',
+          title: 'Identificación',
+          body: `DNI ${doc}.`,
+          hint: '',
+        },
+        {
+          id: 'diagnostico',
+          title: 'Diagnóstico',
+          body: 'Ver ficha del paciente.',
+          hint: '',
+        },
+        {
+          id: 'plan',
+          title: 'Plan',
+          body: 'Continuar el seguimiento en el hospital de adultos que le asigne la posta.',
+          hint: '',
+        },
+      ]).replaceAll("'", "''");
+      await queryRunner.query(`
+        INSERT INTO "TransitionSummary"
+          ("PatientId","Status","Sections","PendingChecks","DraftedByKind","DraftedByName","DraftedAt","CreatedById")
+        SELECT pat."Id", 'DRAFT', '${sections}'::jsonb, '[]'::jsonb, 'AI', 'Generador IA (plantilla server-side)',
+          CURRENT_TIMESTAMP - INTERVAL '2 days', adm."Id"
+        FROM (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" = '${doc}') AS pat
+        CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+      `);
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     const minorDocs = Array.from({ length: 10 }, (_, i) => `7000001${i}`);
     const adultDocs = Array.from({ length: 10 }, (_, i) => `7000002${i}`);
-    const allDocs = [...minorDocs, ...adultDocs].map((d) => `'${d}'`).join(',');
+    const windowDocs = Array.from({ length: 18 }, (_, i) => `700000${30 + i}`);
+    const allDocs = [...minorDocs, ...adultDocs, ...windowDocs]
+      .map((d) => `'${d}'`)
+      .join(',');
     const guardianUsers = Array.from(
       { length: 10 },
       (_, i) => `'tutor${i + 3}'`,
