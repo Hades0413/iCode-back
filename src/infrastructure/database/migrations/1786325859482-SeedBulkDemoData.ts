@@ -499,6 +499,42 @@ export class SeedBulkDemoData1786325859482 implements MigrationInterface {
         CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
       `);
     }
+
+    // ============================================================
+    // 11) El médico del hospital de adultos que recibe el "pase de
+    // consulta" — escanea (o tipea) el código único que el paciente
+    // genera en "Mi recorrido" y ve su historia clínica de transferencia
+    // vía GET /patients/consultation/:code/clinical-summary. Mismo rol
+    // que "internista1" (HEALTH_STAFF, con PATIENT_READ — ver
+    // SeedInitialData.ts), pero un usuario nuevo y aparte: "internista1"
+    // ya representa a alguien puntual en el dominio de consentimiento, y
+    // este es explícitamente el usuario de demo para probar el flujo del
+    // código de consulta.
+    // ============================================================
+    await queryRunner.query(`
+      INSERT INTO "User"
+      ("UserName","Email","FirstName","LastName","PasswordHash","PasswordSalt","SecurityStamp","State","Photo","CreatedAt","CreatedById")
+      SELECT
+        'internista2','internista2@example.com','Sergio','Antúnez',
+        decode('b90efe621fc76a08a09f6e7a9c5c8db958cad73c444208ec5cdb9e99d5aabb90','hex'),
+        decode('821eabeec79a13d89640bf8740cab629','hex'),
+        gen_random_uuid(), true, '', CURRENT_TIMESTAMP, adm."Id"
+      FROM (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    await queryRunner.query(`
+      INSERT INTO "UserRole" ("UserId","RoleId","CreatedById")
+      SELECT u."Id", r."Id", adm."Id"
+      FROM (SELECT "Id" FROM "User" WHERE "UserName" = 'internista2') AS u
+      CROSS JOIN (SELECT "Id" FROM "Role" WHERE "Code" = 'HEALTH_STAFF') AS r
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
+    await queryRunner.query(`
+      INSERT INTO "HealthFacilityStaff" ("UserId","HealthFacilityId","CreatedById")
+      SELECT u."Id", fac."Id", adm."Id"
+      FROM (SELECT "Id" FROM "User" WHERE "UserName" = 'internista2') AS u
+      CROSS JOIN (SELECT "Id" FROM "HealthFacility" WHERE "RenhiceCode" = 'DEMO-ADU-002') AS fac
+      CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
+    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
@@ -513,6 +549,15 @@ export class SeedBulkDemoData1786325859482 implements MigrationInterface {
       (_, i) => `'tutor${i + 3}'`,
     ).join(',');
 
+    await queryRunner.query(`
+      DELETE FROM "HealthFacilityStaff" WHERE "UserId" = (SELECT "Id" FROM "User" WHERE "UserName" = 'internista2')
+    `);
+    await queryRunner.query(`
+      DELETE FROM "UserRole" WHERE "UserId" = (SELECT "Id" FROM "User" WHERE "UserName" = 'internista2')
+    `);
+    await queryRunner.query(
+      `DELETE FROM "User" WHERE "UserName" = 'internista2'`,
+    );
     await queryRunner.query(`
       DELETE FROM "JourneyMessage" WHERE "PatientId" IN (SELECT "Id" FROM "Patient" WHERE "DocumentNumber" IN (${allDocs}))
     `);
