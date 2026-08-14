@@ -123,4 +123,27 @@ export class PatientTransition extends AuditableEntity {
 
   @Column({ name: 'CounterReferralStatus', type: 'varchar', length: 10 })
   counterReferralStatus: CounterReferralStatus | 'NONE';
+
+  /**
+   * El código con el que un médico (en la consulta, sin este backend)
+   * resuelve de qué paciente se trata — ver
+   * TransitionSummariesController#findByConsultationCode. Único y
+   * buscable, por eso columna propia y no otro campo dentro de un jsonb.
+   */
+  @Column({
+    name: 'ConsultationCode',
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+    unique: true,
+  })
+  consultationCode: string | null;
+
+  @Column({
+    name: 'ConsultationCodeGeneratedAt',
+    type: 'timestamp',
+    precision: 6,
+    nullable: true,
+  })
+  consultationCodeGeneratedAt: Date | null;
 }

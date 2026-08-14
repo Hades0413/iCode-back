@@ -14,6 +14,7 @@ import { JourneyService } from '../../application/services/journey/journey.servi
 import { SetChecklistItemDto } from '../../application/dto/journey/set-checklist-item.dto';
 import { SendReminderDto } from '../../application/dto/journey/send-reminder.dto';
 import { SetGuardianAccessDto } from '../../application/dto/journey/set-guardian-access.dto';
+import { ReportAppointmentDto } from '../../application/dto/journey/report-appointment.dto';
 import { RequirePermission } from '../decorators/require-permission.decorator';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../decorators/current-user.decorator';
@@ -87,5 +88,28 @@ export class JourneyController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.journeyService.dismissMessage(messageId, user.id);
+  }
+
+  @Put('appointment')
+  @RequirePermission('APPOINTMENT_SELF_REPORT')
+  @ApiOperation({
+    summary:
+      'El paciente registra una cita que consiguió por su cuenta — 409 si ya tenía una',
+  })
+  reportAppointment(
+    @Body() dto: ReportAppointmentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.journeyService.reportAppointment(dto, user.id);
+  }
+
+  @Post('consultation-code')
+  @RequirePermission('CONSULTATION_CODE_MANAGE')
+  @ApiOperation({
+    summary:
+      'Genera (o regenera) el código único para que un médico vea el resumen clínico en la consulta',
+  })
+  generateConsultationCode(@CurrentUser() user: AuthenticatedUser) {
+    return this.journeyService.generateConsultationCode(user.id);
   }
 }

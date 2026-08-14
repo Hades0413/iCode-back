@@ -75,6 +75,22 @@ export class TransitionSummaryService {
     return this.toResponseDto(summary);
   }
 
+  /**
+   * La misma consulta que "findByPatient", resuelta desde el código único
+   * que el paciente genera en "Mi recorrido" (ver
+   * JourneyService.generateConsultationCode) en vez de un "patientId" —
+   * para el médico que lo atiende y no tiene forma de conocer ese id.
+   */
+  async findByConsultationCode(
+    code: string,
+  ): Promise<TransitionSummaryResponseDto> {
+    const patientId =
+      await this.patientTransitionService.findPatientIdByConsultationCode(
+        code,
+      );
+    return this.findByPatient(patientId);
+  }
+
   async generate(
     patientId: number,
     currentUserId: number,

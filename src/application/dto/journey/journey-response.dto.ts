@@ -73,6 +73,12 @@ export class JourneyViewerDto {
 
   @ApiProperty()
   canManageGuardianAccess: boolean;
+
+  @ApiProperty()
+  canReportAppointment: boolean;
+
+  @ApiProperty()
+  canManageConsultationCode: boolean;
 }
 
 export class TransitionJourneyDto {
@@ -115,6 +121,20 @@ export class TransitionJourneyDto {
   guardian: JourneyGuardianDto | null;
   @ApiProperty({ type: JourneyMessageDto, nullable: true })
   pendingMessage: JourneyMessageDto | null;
+
+  @ApiProperty({
+    nullable: true,
+    description:
+      'Código único para que un médico vea el resumen clínico sin pedir el documento — null hasta que el paciente lo genere, o si el que tenía ya venció',
+  })
+  consultationCode: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    description:
+      'ISO 8601 — cuándo vence "consultationCode" (dura 15 minutos). Null si consultationCode es null.',
+  })
+  consultationCodeExpiresAt: string | null;
 }
 
 export class JourneyAccessResponseDto {

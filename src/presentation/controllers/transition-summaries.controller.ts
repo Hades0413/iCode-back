@@ -75,4 +75,21 @@ export class TransitionSummariesController {
   ) {
     return this.summaryService.approve(patientId, user.id);
   }
+
+  /**
+   * 4 segmentos ("patients/consultation/:code/clinical-summary") contra
+   * los 3 de ":patientId/clinical-summary" — no compiten por la misma
+   * ruta sea cual sea el orden de registro de los controllers (mismo
+   * cuidado que separó "/patient-transitions" de "/patients/:id", ver
+   * PUENTE18_FRONTEND_INTEGRATION.md, sección 2).
+   */
+  @Get('consultation/:code/clinical-summary')
+  @RequirePermission('PATIENT_READ')
+  @ApiOperation({
+    summary:
+      'Resuelve el código único del paciente (QR de "Mi recorrido") y devuelve su historia clínica de transferencia — para el médico que lo atiende',
+  })
+  findByConsultationCode(@Param('code') code: string) {
+    return this.summaryService.findByConsultationCode(code);
+  }
 }

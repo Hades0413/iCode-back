@@ -5,10 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomBytes } from 'crypto';
 import { IsNull, Repository } from 'typeorm';
 import { Patient } from '../../../domain/entities/patients/patient.entity';
 import { LegalGuardian } from '../../../domain/entities/patients/legal-guardian.entity';
-import { PatientTransition } from '../../../domain/entities/patients/patient-transition.entity';
+import {
+  AppointmentDetails,
+  PatientTransition,
+} from '../../../domain/entities/patients/patient-transition.entity';
 import { JourneyChecklistItem } from '../../../domain/entities/journey/journey-checklist-item.entity';
 import { JourneyMedication } from '../../../domain/entities/journey/journey-medication.entity';
 import { JourneyAllergy } from '../../../domain/entities/journey/journey-allergy.entity';
@@ -18,8 +22,26 @@ import { JourneyMessage } from '../../../domain/entities/journey/journey-message
 import { User } from '../../../domain/entities/user.entity';
 import { RelationshipType } from '../../../domain/enums/relationship-type.enum';
 import { ClinicalSummaryStatus } from '../../../domain/enums/clinical-summary-status.enum';
+import { TransitionState } from '../../../domain/enums/transition-state.enum';
 import { PatientTransitionService } from '../transition/patient-transition.service';
 import { JourneyAccessResponseDto } from '../../dto/journey/journey-response.dto';
+import { ReportAppointmentDto } from '../../dto/journey/report-appointment.dto';
+
+/**
+ * Estados en los que ya pasó (o dejó de importar) la primera cita: llegado
+ * acá, autoregistrar una cita nueva por este camino ya no tiene sentido —
+ * es tarea del especialista, no de este atajo del paciente.
+ */
+const BEYOND_FIRST_APPOINTMENT = new Set<TransitionState>([
+  TransitionState.FIRST_CARE_DONE,
+  TransitionState.LOST_TO_FOLLOW_UP,
+  TransitionState.READMITTED,
+]);
+
+/** 6 caracteres, sin 0/O ni 1/I/L (se confunden al dictarlos por teléfono o leerlos en la consulta). */
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const CODE_LENGTH = 6;
+const MAX_CODE_ATTEMPTS = 5;
 
 const RELATIONSHIP_LABELS: Record<RelationshipType, string> = {
   [RelationshipType.MADRE]: 'madre',
@@ -196,6 +218,8 @@ export class JourneyService {
       canEditChecklist: role === 'OWNER',
       canSendReminder: role === 'GUARDIAN',
       canManageGuardianAccess: role === 'OWNER',
+      canReportAppointment: role === 'OWNER',
+      canManageConsultationCode: role === 'OWNER',
     };
   }
 
@@ -328,8 +352,111 @@ export class JourneyService {
                 : 'tu tutor',
             }
           : null,
+        // Vencido, se muestra como si nunca se hubiera generado: el
+        // paciente lo ve desaparecer solo la próxima vez que recarga
+        // su recorrido, sin que nadie tenga que "limpiarlo" en la base.
+        consultationCode:
+          transition && this.patientTransitionService.isConsultationCodeValid(transition)
+            ? transition.consultationCode
+            : null,
+        consultationCodeExpiresAt:
+          transition && this.patientTransitionService.isConsultationCodeValid(transition)
+            ? this.patientTransitionService
+                .consultationCodeExpiresAt(transition)!
+                .toISOString()
+            : null,
       },
     };
+  }
+
+  /**
+   * El paciente encontró su cita por su cuenta, sin esperar a que la
+   * posta se la consiga — 409 si ya había una (evita pisar en silencio
+   * la que sí gestionó la posta).
+   */
+  async reportAppointment(
+    dto: ReportAppointmentDto,
+    currentUserId: number,
+  ): Promise<JourneyAccessResponseDto> {
+    const patient = await this.getOwnedPatientOrFail(currentUserId);
+    const transition = await this.transitionRepository.findOne({
+      where: { patientId: patient.id },
+    });
+    if (!transition) {
+      throw new NotFoundException('No hay un registro de transición para vos');
+    }
+    if (transition.appointment) {
+      throw new ConflictException('Ya tienes una cita registrada');
+    }
+
+    const appointment: AppointmentDetails = {
+      hospital: dto.hospital,
+      specialist: dto.doctor,
+      date: `${dto.date}T${dto.time}:00`,
+      reason: 'Primera consulta en el hospital de adultos',
+      managedBy: 'Autoregistrada por el paciente',
+    };
+    transition.appointment = appointment;
+    if (!BEYOND_FIRST_APPOINTMENT.has(transition.state)) {
+      transition.state = TransitionState.APPOINTMENT_GRANTED;
+    }
+    transition.updatedAt = new Date();
+    transition.updatedById = currentUserId;
+    await this.transitionRepository.save(transition);
+
+    return this.buildGrantedResponse(patient.id, 'OWNER', 'Tú');
+  }
+
+  /**
+   * Genera (o regenera) el código único de consulta. Regenerar invalida el
+   * anterior sin avisar a nadie más: no hay ningún tercero con ese código
+   * guardado todavía, es el paciente mostrándolo recién en el momento.
+   */
+  async generateConsultationCode(
+    currentUserId: number,
+  ): Promise<JourneyAccessResponseDto> {
+    const patient = await this.getOwnedPatientOrFail(currentUserId);
+    const transition = await this.transitionRepository.findOne({
+      where: { patientId: patient.id },
+    });
+    if (!transition) {
+      throw new NotFoundException('No hay un registro de transición para vos');
+    }
+
+    transition.consultationCode = await this.generateUniqueCode();
+    transition.consultationCodeGeneratedAt = new Date();
+    transition.updatedAt = new Date();
+    transition.updatedById = currentUserId;
+    await this.transitionRepository.save(transition);
+
+    return this.buildGrantedResponse(patient.id, 'OWNER', 'Tú');
+  }
+
+  private async generateUniqueCode(): Promise<string> {
+    for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
+      const candidate = this.randomCode();
+      const clash = await this.transitionRepository.findOne({
+        where: { consultationCode: candidate },
+      });
+      if (!clash) {
+        return candidate;
+      }
+    }
+    // Con 32^8 combinaciones posibles, agotar los intentos es
+    // prácticamente imposible salvo un bug — mejor un 500 explícito que
+    // devolver un código que podría no ser único.
+    throw new ConflictException(
+      'No se pudo generar un código único, intenta de nuevo',
+    );
+  }
+
+  private randomCode(): string {
+    const bytes = randomBytes(CODE_LENGTH);
+    let code = '';
+    for (let i = 0; i < CODE_LENGTH; i++) {
+      code += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+    }
+    return code;
   }
 
   private async getOwnedPatientOrFail(currentUserId: number): Promise<Patient> {

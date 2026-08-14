@@ -32,6 +32,14 @@ interface LastActionCandidate {
 }
 
 /**
+ * Corta a propósito: se dicta en la consulta, no se copia y pega — ver
+ * JourneyService.generateConsultationCode. Vencido, "generas otro y ya"
+ * (no hay forma de extenderlo, es más simple que el paciente lo
+ * regenere que mantener un estado "renovado").
+ */
+export const CONSULTATION_CODE_TTL_MINUTES = 15;
+
+/**
  * Dueño de "PatientTransition" — el tablero del especialista
  * (in-tutelage), el panel post-transición (post-transition) y las
  * columnas calculadas que ambos comparten. Referral/CounterReferral/
@@ -293,6 +301,47 @@ export class PatientTransitionService {
       referredToPostAt: transition.referredToPostAt,
       healthPostFacilityId: transition.healthPostFacilityId,
     };
+  }
+
+  /**
+   * Resuelve el código único de consulta (ver JourneyService.generateConsultationCode)
+   * al paciente dueño — lo usa TransitionSummariesController para que un
+   * médico vea el resumen sin conocer el "patientId". 404 igual si el
+   * código existe pero ya venció: para quien lo escanea o lo tipea es
+   * indistinguible de uno que nunca existió.
+   */
+  async findPatientIdByConsultationCode(code: string): Promise<number> {
+    const transition = await this.transitionRepository.findOne({
+      where: { consultationCode: code },
+    });
+    if (!transition || !this.isConsultationCodeValid(transition)) {
+      throw new NotFoundException('Código de consulta no válido o vencido');
+    }
+    return transition.patientId;
+  }
+
+  /**
+   * Vencimiento calculado siempre desde "ConsultationCodeGeneratedAt",
+   * nunca guardado — mismo criterio que "isAdult"/"monthsToEighteen"
+   * (ver TitleTransferService): una columna de vencimiento se puede
+   * desincronizar, una cuenta no.
+   */
+  isConsultationCodeValid(transition: PatientTransition): boolean {
+    if (!transition.consultationCode || !transition.consultationCodeGeneratedAt) {
+      return false;
+    }
+    return this.consultationCodeExpiresAt(transition)!.getTime() > Date.now();
+  }
+
+  /** null si nunca se generó ningún código. */
+  consultationCodeExpiresAt(transition: PatientTransition): Date | null {
+    if (!transition.consultationCodeGeneratedAt) {
+      return null;
+    }
+    return new Date(
+      transition.consultationCodeGeneratedAt.getTime() +
+        CONSULTATION_CODE_TTL_MINUTES * 60_000,
+    );
   }
 
   async getTransitionOrFail(patientId: number): Promise<PatientTransition> {
