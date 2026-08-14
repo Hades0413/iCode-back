@@ -9,7 +9,9 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { TransitionSummaryService } from '../../application/services/clinical/transition-summary.service';
+import { PatientTransitionService } from '../../application/services/transition/patient-transition.service';
 import { UpdateTransitionSummaryDto } from '../../application/dto/clinical/update-transition-summary.dto';
+import { ReportAppointmentDto } from '../../application/dto/journey/report-appointment.dto';
 import { RequirePermission } from '../decorators/require-permission.decorator';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../decorators/current-user.decorator';
@@ -25,7 +27,10 @@ import type { AuthenticatedUser } from '../decorators/current-user.decorator';
 @ApiBearerAuth()
 @Controller('patients')
 export class TransitionSummariesController {
-  constructor(private readonly summaryService: TransitionSummaryService) {}
+  constructor(
+    private readonly summaryService: TransitionSummaryService,
+    private readonly transitionService: PatientTransitionService,
+  ) {}
 
   @Get(':patientId/clinical-summary')
   @RequirePermission('PATIENT_READ')
@@ -91,5 +96,42 @@ export class TransitionSummariesController {
   })
   findByConsultationCode(@Param('code') code: string) {
     return this.summaryService.findByConsultationCode(code);
+  }
+
+  /**
+   * El encabezado del "pase de consulta" (iniciales, edad, especialidad,
+   * diagnóstico) — recurso separado de la historia clínica de arriba,
+   * mismo código, mismo criterio que "GET /patients/:id" vs
+   * "GET /patients/:id/clinical-summary".
+   */
+  @Get('consultation/:code')
+  @RequirePermission('PATIENT_READ')
+  @ApiOperation({
+    summary:
+      'Resuelve el código único del paciente y devuelve los datos de su ficha — para el encabezado del pase de consulta',
+  })
+  findPatientByConsultationCode(@Param('code') code: string) {
+    return this.transitionService.findDetailByConsultationCode(code);
+  }
+
+  /**
+   * "Registrar esta atención": el médico confirma que la consulta de hoy
+   * pasó, con qué hospital/doctor/fecha/hora — llena la cita si el
+   * paciente no la tenía y pasa el caso a FIRST_CARE_DONE. Pide
+   * PATIENT_WRITE (no uno nuevo): es la misma acción de escribir el caso
+   * que ya protegía "PATCH /patient-transitions/:patientId".
+   */
+  @Post('consultation/:code/visit')
+  @RequirePermission('PATIENT_WRITE')
+  @ApiOperation({
+    summary:
+      'Registra la atención de hoy (hospital, doctor, fecha y hora) y pasa el caso a FIRST_CARE_DONE',
+  })
+  registerConsultationVisit(
+    @Param('code') code: string,
+    @Body() dto: ReportAppointmentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.transitionService.registerConsultationVisit(code, dto, user.id);
   }
 }

@@ -321,6 +321,52 @@ export class PatientTransitionService {
   }
 
   /**
+   * La ficha del paciente para el "pase de consulta" — el encabezado con
+   * sus datos (iniciales, edad, especialidad, diagnóstico) que acompaña al
+   * resumen que resuelve TransitionSummariesController con el mismo
+   * código. Dos recursos separados (identidad / historia clínica), mismo
+   * criterio que "GET /patients/:id" vs "GET /patients/:id/clinical-summary".
+   */
+  async findDetailByConsultationCode(
+    code: string,
+  ): Promise<PatientTransitionResponseDto> {
+    const patientId = await this.findPatientIdByConsultationCode(code);
+    return this.findDetail(patientId);
+  }
+
+  /**
+   * "Registrar esta atención" — el médico del hospital de adultos confirma
+   * que la consulta está pasando ahora mismo. A diferencia de
+   * "JourneyService.reportAppointment" (el paciente auto-registrando una
+   * cita que ÉL consiguió, antes de la consulta), esto lo hace el médico
+   * EN la consulta y siempre pisa lo que hubiera antes — no hay conflicto
+   * posible: la atención de hoy es la que importa. Por eso el estado pasa
+   * directo a FIRST_CARE_DONE, no a APPOINTMENT_GRANTED.
+   */
+  async registerConsultationVisit(
+    code: string,
+    report: { hospital: string; doctor: string; date: string; time: string },
+    currentUserId: number,
+  ): Promise<PatientTransitionResponseDto> {
+    const patientId = await this.findPatientIdByConsultationCode(code);
+    const transition = await this.getTransitionOrFail(patientId);
+
+    transition.appointment = {
+      hospital: report.hospital,
+      specialist: report.doctor,
+      date: `${report.date}T${report.time}:00`,
+      reason: 'Primera atención en el hospital de adultos',
+      managedBy: 'Registrada por el médico en el pase de consulta',
+    };
+    transition.state = TransitionState.FIRST_CARE_DONE;
+    transition.updatedAt = new Date();
+    transition.updatedById = currentUserId;
+    await this.transitionRepository.save(transition);
+
+    return this.findDetail(patientId);
+  }
+
+  /**
    * Vencimiento calculado siempre desde "ConsultationCodeGeneratedAt",
    * nunca guardado — mismo criterio que "isAdult"/"monthsToEighteen"
    * (ver TitleTransferService): una columna de vencimiento se puede
