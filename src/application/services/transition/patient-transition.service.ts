@@ -327,7 +327,10 @@ export class PatientTransitionService {
    * desincronizar, una cuenta no.
    */
   isConsultationCodeValid(transition: PatientTransition): boolean {
-    if (!transition.consultationCode || !transition.consultationCodeGeneratedAt) {
+    if (
+      !transition.consultationCode ||
+      !transition.consultationCodeGeneratedAt
+    ) {
       return false;
     }
     return this.consultationCodeExpiresAt(transition)!.getTime() > Date.now();

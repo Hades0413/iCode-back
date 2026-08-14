@@ -85,9 +85,7 @@ export class TransitionSummaryService {
     code: string,
   ): Promise<TransitionSummaryResponseDto> {
     const patientId =
-      await this.patientTransitionService.findPatientIdByConsultationCode(
-        code,
-      );
+      await this.patientTransitionService.findPatientIdByConsultationCode(code);
     return this.findByPatient(patientId);
   }
 

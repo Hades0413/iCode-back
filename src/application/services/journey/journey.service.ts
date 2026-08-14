@@ -356,11 +356,13 @@ export class JourneyService {
         // paciente lo ve desaparecer solo la próxima vez que recarga
         // su recorrido, sin que nadie tenga que "limpiarlo" en la base.
         consultationCode:
-          transition && this.patientTransitionService.isConsultationCodeValid(transition)
+          transition &&
+          this.patientTransitionService.isConsultationCodeValid(transition)
             ? transition.consultationCode
             : null,
         consultationCodeExpiresAt:
-          transition && this.patientTransitionService.isConsultationCodeValid(transition)
+          transition &&
+          this.patientTransitionService.isConsultationCodeValid(transition)
             ? this.patientTransitionService
                 .consultationCodeExpiresAt(transition)!
                 .toISOString()
