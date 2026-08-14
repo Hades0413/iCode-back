@@ -16,6 +16,7 @@ import { TransitionSummary } from '../../../domain/entities/clinical/transition-
 import { PostNotice } from '../../../domain/entities/referrals/post-notice.entity';
 import { ReferralAlert } from '../../../domain/entities/referrals/referral-alert.entity';
 import { CounterReferral } from '../../../domain/entities/referrals/counter-referral.entity';
+import { ReferralReview } from '../../../domain/entities/referrals/referral-review.entity';
 import { JourneyChecklistItem } from '../../../domain/entities/journey/journey-checklist-item.entity';
 import { User } from '../../../domain/entities/user.entity';
 import { TransitionState } from '../../../domain/enums/transition-state.enum';
@@ -75,6 +76,8 @@ export class PatientTransitionService {
     private readonly referralAlertRepository: Repository<ReferralAlert>,
     @InjectRepository(CounterReferral)
     private readonly counterReferralRepository: Repository<CounterReferral>,
+    @InjectRepository(ReferralReview)
+    private readonly referralReviewRepository: Repository<ReferralReview>,
     @InjectRepository(JourneyChecklistItem)
     private readonly checklistRepository: Repository<JourneyChecklistItem>,
     @InjectRepository(User)
@@ -556,6 +559,7 @@ export class PatientTransitionService {
       postNotices,
       referralAlerts,
       counterReferrals,
+      referralReviews,
       checklistItems,
     ] = await Promise.all([
       this.summaryRepository.find({ where: { patientId: In(patientIds) } }),
@@ -566,6 +570,9 @@ export class PatientTransitionService {
         where: { patientId: In(patientIds) },
       }),
       this.counterReferralRepository.find({
+        where: { patientId: In(patientIds) },
+      }),
+      this.referralReviewRepository.find({
         where: { patientId: In(patientIds) },
       }),
       this.checklistRepository.find({
@@ -632,6 +639,9 @@ export class PatientTransitionService {
       const summary = summaries.find((s) => s.patientId === t.patientId);
       const counterReferral = counterReferrals.find(
         (c) => c.patientId === t.patientId,
+      );
+      const referralReview = referralReviews.find(
+        (r) => r.patientId === t.patientId,
       );
       const noticesForPatient = postNotices.filter(
         (n) => n.patientId === t.patientId,
@@ -719,6 +729,7 @@ export class PatientTransitionService {
         hospitalReferral: t.hospitalReferral,
         appointment: t.appointment,
         counterReferralStatus: t.counterReferralStatus,
+        referralReviewStatus: referralReview?.status ?? 'NONE',
         // El front lo declara "string" siempre (no nullable) — sin
         // ningún evento todavía, es un caso recién dado de alta.
         lastAction: lastAction ?? 'Sin actividad registrada todavía',

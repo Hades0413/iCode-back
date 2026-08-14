@@ -15,4 +15,16 @@ export default registerAs('app', () => ({
   ),
   counterReferralStoragePath:
     process.env.COUNTER_REFERRAL_STORAGE_PATH ?? './storage/counter-referrals',
+  referralReviewStoragePath:
+    process.env.REFERRAL_REVIEW_STORAGE_PATH ?? './storage/referral-reviews',
+  transitionSummaryStoragePath:
+    process.env.TRANSITION_SUMMARY_STORAGE_PATH ??
+    './storage/transition-summaries',
+  patientAttachmentStoragePath:
+    process.env.PATIENT_ATTACHMENT_STORAGE_PATH ?? './storage/attachments',
+  // Sin valor por defecto a propósito: si no está configurada, "generar
+  // con IA" contesta 503 en vez de fingir con una plantilla — ver
+  // OpenAiSummaryDraftingService.
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  openaiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
 }));

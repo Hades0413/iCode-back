@@ -16,6 +16,8 @@ import { TransitionModule } from './transition.module';
 import { TransitionSummaryModule } from './transition-summary.module';
 import { ReferralModule } from './referral.module';
 import { CounterReferralModule } from './counter-referral.module';
+import { ReferralReviewModule } from './referral-review.module';
+import { PatientAttachmentModule } from './patient-attachment.module';
 import { JourneyModule } from './journey.module';
 import { SanitizeMiddleware } from './common/middlewares/sanitize.middleware';
 import { EncryptResponseInterceptor } from './common/interceptors/encrypt-response.interceptor';
@@ -80,6 +82,8 @@ import { PermissionGuard } from './presentation/guards/permission.guard';
     TransitionSummaryModule,
     ReferralModule,
     CounterReferralModule,
+    ReferralReviewModule,
+    PatientAttachmentModule,
     JourneyModule,
   ],
   controllers: [AppController, HealthController],

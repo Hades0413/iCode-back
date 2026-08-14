@@ -6,8 +6,16 @@ import {
   ParseIntPipe,
   Post,
   Put,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { TransitionSummaryService } from '../../application/services/clinical/transition-summary.service';
 import { PatientTransitionService } from '../../application/services/transition/patient-transition.service';
 import { UpdateTransitionSummaryDto } from '../../application/dto/clinical/update-transition-summary.dto';
@@ -79,6 +87,35 @@ export class TransitionSummariesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.summaryService.approve(patientId, user.id);
+  }
+
+  @Post(':patientId/clinical-summary/template')
+  @RequirePermission('PATIENT_WRITE')
+  @ApiOperation({
+    summary:
+      '"Llenar la plantilla" — arranca un borrador en blanco a mano, sin IA',
+  })
+  startBlankTemplate(
+    @Param('patientId', ParseIntPipe) patientId: number,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.summaryService.startBlankTemplate(patientId, user.id);
+  }
+
+  @Post(':patientId/clinical-summary/document')
+  @RequirePermission('PATIENT_WRITE')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({
+    summary:
+      '"Subir el documento" — la historia ya viene redactada aparte (PDF/Word, máx. 10MB); solo se adjunta',
+  })
+  uploadSourceDocument(
+    @Param('patientId', ParseIntPipe) patientId: number,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.summaryService.uploadSourceDocument(patientId, file, user.id);
   }
 
   /**

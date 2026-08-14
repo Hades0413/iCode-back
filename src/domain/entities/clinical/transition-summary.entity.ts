@@ -43,6 +43,31 @@ export class TransitionSummary extends AuditableEntity {
   @Column({ name: 'DraftedByName', type: 'varchar', length: 150 })
   draftedByName: string;
 
+  /**
+   * Cuando el borrador vino de "Subir el documento" en vez de generarse
+   * (IA o plantilla en blanco) — el archivo original que el médico subió
+   * ya redactado, para poder abrirlo mientras completa los bloques. Los
+   * tres campos quedan null si el borrador no vino de un archivo.
+   */
+  @Column({
+    name: 'SourceFileName',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  sourceFileName: string | null;
+
+  @Column({ name: 'SourceFileSize', type: 'int', nullable: true })
+  sourceFileSize: number | null;
+
+  @Column({
+    name: 'SourceStoragePath',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
+  sourceStoragePath: string | null;
+
   @Column({ name: 'DraftedAt', type: 'timestamp', precision: 6 })
   draftedAt: Date;
 

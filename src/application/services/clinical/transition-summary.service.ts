@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { extname } from 'node:path';
 import { TransitionSummary } from '../../../domain/entities/clinical/transition-summary.entity';
 import { User } from '../../../domain/entities/user.entity';
 import { ClinicalSummaryStatus } from '../../../domain/enums/clinical-summary-status.enum';
@@ -16,36 +18,19 @@ import {
   ClinicalSummaryResultDto,
   TransitionSummaryResponseDto,
 } from '../../dto/clinical/transition-summary-response.dto';
+import {
+  OpenAiSummaryDraftingService,
+  SUMMARY_SECTION_TEMPLATE,
+} from './openai-summary-drafting.service';
+import { TransitionSummaryStorageService } from './transition-summary-storage.service';
 
 /** Habilitado desde 3 meses antes de los 18 — ver PUENTE18_FRONTEND_INTEGRATION.md, sección 3. */
 const ENABLE_MONTHS_BEFORE_18 = 3;
 /** La firma solo se puede hacer en el último mes antes del cumpleaños (o después, si por algo quedó pendiente). */
 const SIGN_MONTHS_BEFORE_18 = 1;
 
-const SECTION_TEMPLATE: Array<{ id: string; title: string; hint: string }> = [
-  {
-    id: 'identificacion',
-    title: 'Identificación',
-    hint: 'Datos básicos del paciente',
-  },
-  {
-    id: 'diagnostico',
-    title: 'Diagnóstico',
-    hint: 'Diagnóstico principal y relevantes',
-  },
-  {
-    id: 'tratamiento',
-    title: 'Tratamiento',
-    hint: 'Medicación y esquema actual',
-  },
-  { id: 'evolucion', title: 'Evolución', hint: 'Evolución clínica relevante' },
-  { id: 'alertas', title: 'Alertas', hint: 'Alergias y alertas clínicas' },
-  {
-    id: 'plan',
-    title: 'Plan',
-    hint: 'Plan de continuidad para el hospital de adultos',
-  },
-];
+const MAX_SOURCE_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_SOURCE_EXTENSIONS = new Set(['.pdf', '.doc', '.docx']);
 
 /**
  * La historia clínica de transferencia ("las 2 hojas") — ver
@@ -66,6 +51,8 @@ export class TransitionSummaryService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly patientTransitionService: PatientTransitionService,
+    private readonly openAiDrafting: OpenAiSummaryDraftingService,
+    private readonly summaryStorageService: TransitionSummaryStorageService,
   ) {}
 
   async findByPatient(
@@ -126,31 +113,40 @@ export class TransitionSummaryService {
           'El borrador ya fue editado por un médico — regenerarlo pisaría esas correcciones',
         );
       }
+      const detail = await this.patientTransitionService.findDetail(patientId);
       const { sections, pendingChecks } =
-        await this.buildTemplateSections(patientId);
+        await this.openAiDrafting.draft(detail);
       existing.sections = sections;
       existing.pendingChecks = pendingChecks;
+      existing.draftedByKind = SummaryAuthorKind.AI;
+      existing.draftedByName = `OpenAI (${this.openAiDrafting.modelName()})`;
       existing.draftedAt = new Date();
+      existing.sourceFileName = null;
+      existing.sourceFileSize = null;
+      existing.sourceStoragePath = null;
       existing.updatedAt = new Date();
       existing.updatedById = currentUserId;
       const saved = await this.summaryRepository.save(existing);
       return this.toResultDto(patientId, saved);
     }
 
-    const { sections, pendingChecks } =
-      await this.buildTemplateSections(patientId);
+    const detail = await this.patientTransitionService.findDetail(patientId);
+    const { sections, pendingChecks } = await this.openAiDrafting.draft(detail);
     const summary = this.summaryRepository.create({
       patientId,
       status: ClinicalSummaryStatus.DRAFT,
       sections,
       pendingChecks,
       draftedByKind: SummaryAuthorKind.AI,
-      draftedByName: 'Generador de plantillas (servidor)',
+      draftedByName: `OpenAI (${this.openAiDrafting.modelName()})`,
       draftedAt: new Date(),
       editedById: null,
       editedAt: null,
       approvedById: null,
       approvedAt: null,
+      sourceFileName: null,
+      sourceFileSize: null,
+      sourceStoragePath: null,
       createdAt: new Date(),
       createdById: currentUserId,
     });
@@ -250,6 +246,207 @@ export class TransitionSummaryService {
     return this.toResultDto(patientId, saved);
   }
 
+  /** "Llenar la plantilla" — arranca un borrador en blanco, a mano, sin IA. */
+  async startBlankTemplate(
+    patientId: number,
+    currentUserId: number,
+  ): Promise<ClinicalSummaryResultDto> {
+    const existing = await this.assertCanStartNewDraft(
+      patientId,
+      currentUserId,
+    );
+    const author = await this.resolveUserName(currentUserId);
+    const sections = SUMMARY_SECTION_TEMPLATE.map((s) => ({
+      id: s.id,
+      title: s.title,
+      hint: s.hint,
+      body: '',
+    }));
+    const pendingChecks = sections.map(
+      (s) => `Sección "${s.title}" sin información suficiente`,
+    );
+
+    const saved = existing
+      ? await this.summaryRepository.save(
+          Object.assign(existing, {
+            sections,
+            pendingChecks,
+            draftedByKind: SummaryAuthorKind.HUMAN,
+            draftedByName: author,
+            draftedAt: new Date(),
+            sourceFileName: null,
+            sourceFileSize: null,
+            sourceStoragePath: null,
+            updatedAt: new Date(),
+            updatedById: currentUserId,
+          }),
+        )
+      : await this.createDraft(
+          patientId,
+          currentUserId,
+          sections,
+          pendingChecks,
+          author,
+          null,
+        );
+    return this.toResultDto(patientId, saved);
+  }
+
+  /** "Subir el documento" — la historia ya viene redactada aparte; solo se adjunta. */
+  async uploadSourceDocument(
+    patientId: number,
+    file: Express.Multer.File,
+    currentUserId: number,
+  ): Promise<ClinicalSummaryResultDto> {
+    this.assertValidSourceFile(file);
+    const existing = await this.assertCanStartNewDraft(
+      patientId,
+      currentUserId,
+    );
+    const author = await this.resolveUserName(currentUserId);
+    const storagePath = await this.summaryStorageService.save(
+      patientId,
+      file.originalname,
+      file.buffer,
+    );
+    const sections = SUMMARY_SECTION_TEMPLATE.map((s) => ({
+      id: s.id,
+      title: s.title,
+      hint: s.hint,
+      body: '',
+    }));
+    const pendingChecks = [
+      'Documento subido — transcribir el contenido a las secciones antes de firmar',
+    ];
+    const sourceDocument = {
+      sourceFileName: file.originalname,
+      sourceFileSize: file.size,
+      sourceStoragePath: storagePath,
+    };
+
+    const saved = existing
+      ? await this.summaryRepository.save(
+          Object.assign(existing, {
+            sections,
+            pendingChecks,
+            draftedByKind: SummaryAuthorKind.HUMAN,
+            draftedByName: author,
+            draftedAt: new Date(),
+            ...sourceDocument,
+            updatedAt: new Date(),
+            updatedById: currentUserId,
+          }),
+        )
+      : await this.createDraft(
+          patientId,
+          currentUserId,
+          sections,
+          pendingChecks,
+          author,
+          sourceDocument,
+        );
+    return this.toResultDto(patientId, saved);
+  }
+
+  /** Ventana + conflictos comunes a los 3 puntos de partida del borrador (IA, plantilla, subida). */
+  private async assertCanStartNewDraft(
+    patientId: number,
+    currentUserId: number,
+  ): Promise<TransitionSummary | null> {
+    await this.patientTransitionService.assertSpecialtyMatches(
+      patientId,
+      currentUserId,
+    );
+    const context =
+      await this.patientTransitionService.getRuleContext(patientId);
+    if (
+      context.monthsToEighteen > ENABLE_MONTHS_BEFORE_18 ||
+      context.monthsToEighteen <= 0
+    ) {
+      throw new ConflictException(
+        'No corresponde iniciar la historia clínica de transferencia para este paciente (fuera de la ventana de 3 meses, o ya cumplió 18)',
+      );
+    }
+
+    const existing = await this.summaryRepository.findOne({
+      where: { patientId },
+    });
+    if (existing) {
+      if (existing.status === ClinicalSummaryStatus.APPROVED) {
+        throw new ConflictException(
+          'La historia clínica de transferencia ya está firmada',
+        );
+      }
+      if (existing.editedAt !== null) {
+        throw new ConflictException(
+          'El borrador ya fue editado por un médico — reiniciarlo pisaría esas correcciones',
+        );
+      }
+    } else if (context.state === TransitionState.PENDING) {
+      await this.patientTransitionService.setState(
+        patientId,
+        TransitionState.IN_PREPARATION,
+        currentUserId,
+      );
+    }
+    return existing;
+  }
+
+  private async createDraft(
+    patientId: number,
+    currentUserId: number,
+    sections: TransitionSummary['sections'],
+    pendingChecks: string[],
+    author: string,
+    sourceDocument: {
+      sourceFileName: string;
+      sourceFileSize: number;
+      sourceStoragePath: string;
+    } | null,
+  ): Promise<TransitionSummary> {
+    const summary = this.summaryRepository.create({
+      patientId,
+      status: ClinicalSummaryStatus.DRAFT,
+      sections,
+      pendingChecks,
+      draftedByKind: SummaryAuthorKind.HUMAN,
+      draftedByName: author,
+      draftedAt: new Date(),
+      editedById: null,
+      editedAt: null,
+      approvedById: null,
+      approvedAt: null,
+      sourceFileName: sourceDocument?.sourceFileName ?? null,
+      sourceFileSize: sourceDocument?.sourceFileSize ?? null,
+      sourceStoragePath: sourceDocument?.sourceStoragePath ?? null,
+      createdAt: new Date(),
+      createdById: currentUserId,
+    });
+    return this.summaryRepository.save(summary);
+  }
+
+  private async resolveUserName(userId: number): Promise<string> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    return user ? `${user.firstName} ${user.lastName}`.trim() : 'Médico';
+  }
+
+  private assertValidSourceFile(file: Express.Multer.File): void {
+    if (!file) {
+      throw new BadRequestException('Falta el archivo a subir');
+    }
+    if (file.size > MAX_SOURCE_FILE_SIZE_BYTES) {
+      throw new BadRequestException(
+        'El documento supera el tamaño máximo permitido (10 MB)',
+      );
+    }
+    const extension = extname(file.originalname).toLowerCase();
+    if (!ALLOWED_SOURCE_EXTENSIONS.has(extension)) {
+      throw new BadRequestException(
+        `Formato no permitido (${extension || 'sin extensión'}) — usá PDF o Word`,
+      );
+    }
+  }
+
   private async getSummaryOrFail(
     patientId: number,
   ): Promise<TransitionSummary> {
@@ -262,43 +459,6 @@ export class TransitionSummaryService {
       );
     }
     return summary;
-  }
-
-  private async buildTemplateSections(patientId: number): Promise<{
-    sections: TransitionSummary['sections'];
-    pendingChecks: string[];
-  }> {
-    const detail = await this.patientTransitionService.findDetail(patientId);
-    const pendingChecks: string[] = [];
-    if (!detail.primaryDiagnosis) {
-      pendingChecks.push(
-        'Diagnóstico principal no registrado — completar manualmente',
-      );
-    }
-
-    const body: Record<string, string> = {
-      identificacion: `${detail.firstName} ${detail.lastName}, documento ${detail.documentNumber}, historia clínica ${detail.medicalRecordNumber}.`,
-      diagnostico: detail.primaryDiagnosis
-        ? `Diagnóstico principal: ${detail.primaryDiagnosis} (${detail.specialtyName}).`
-        : '',
-      tratamiento: '',
-      evolucion: '',
-      alertas: '',
-      plan: `Continuar seguimiento en ${detail.specialtyName} tras la derivación al hospital de adultos.`,
-    };
-
-    const sections = SECTION_TEMPLATE.map((s) => ({
-      id: s.id,
-      title: s.title,
-      hint: s.hint,
-      body: body[s.id] ?? '',
-    }));
-    for (const s of sections) {
-      if (!s.body) {
-        pendingChecks.push(`Sección "${s.title}" sin información suficiente`);
-      }
-    }
-    return { sections, pendingChecks };
   }
 
   /** Junta el documento con la fila del paciente — ver ClinicalSummaryResultDto sobre por qué van juntos. */
@@ -344,6 +504,12 @@ export class TransitionSummaryService {
           ? (nameById.get(summary.approvedById) ?? null)
           : null,
       approvedAt: summary.approvedAt ? summary.approvedAt.toISOString() : null,
+      sourceDocument: summary.sourceFileName
+        ? {
+            fileName: summary.sourceFileName,
+            fileSize: summary.sourceFileSize as number,
+          }
+        : null,
     };
   }
 }

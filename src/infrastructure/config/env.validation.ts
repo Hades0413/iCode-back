@@ -54,4 +54,23 @@ export const envValidationSchema = Joi.object({
   COUNTER_REFERRAL_STORAGE_PATH: Joi.string().default(
     './storage/counter-referrals',
   ),
+  // El PDF que manda la posta/hospital cuando observa la historia clínica.
+  REFERRAL_REVIEW_STORAGE_PATH: Joi.string().default(
+    './storage/referral-reviews',
+  ),
+  // "Exámenes y documentos" — imágenes/PDF/Word/video sueltos del caso.
+  PATIENT_ATTACHMENT_STORAGE_PATH: Joi.string().default(
+    './storage/attachments',
+  ),
+  // El archivo original de "Subir el documento" (historia clínica ya redactada).
+  TRANSITION_SUMMARY_STORAGE_PATH: Joi.string().default(
+    './storage/transition-summaries',
+  ),
+
+  // "Generar con IA" — sin esta variable, ese endpoint contesta 503 en vez
+  // de generar nada (nunca cae de vuelta a la plantilla en blanco: el
+  // médico elige eso a mano con "Llenar la plantilla" si no hay IA
+  // configurada). Opcional a propósito: se completa en producción, no acá.
+  OPENAI_API_KEY: Joi.string().optional(),
+  OPENAI_MODEL: Joi.string().default('gpt-4o-mini'),
 });

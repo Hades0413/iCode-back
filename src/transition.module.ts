@@ -10,6 +10,7 @@ import { TransitionSummary } from './domain/entities/clinical/transition-summary
 import { PostNotice } from './domain/entities/referrals/post-notice.entity';
 import { ReferralAlert } from './domain/entities/referrals/referral-alert.entity';
 import { CounterReferral } from './domain/entities/referrals/counter-referral.entity';
+import { ReferralReview } from './domain/entities/referrals/referral-review.entity';
 import { JourneyChecklistItem } from './domain/entities/journey/journey-checklist-item.entity';
 import { User } from './domain/entities/user.entity';
 import { PatientTransitionService } from './application/services/transition/patient-transition.service';
@@ -46,6 +47,7 @@ import { PatientTransitionsController } from './presentation/controllers/patient
       PostNotice,
       ReferralAlert,
       CounterReferral,
+      ReferralReview,
       JourneyChecklistItem,
       User,
     ]),

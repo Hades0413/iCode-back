@@ -73,6 +73,13 @@ export class TransitionSummaryResponseDto {
 
   @ApiProperty({ nullable: true })
   approvedAt: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    description:
+      'El archivo original, cuando el borrador vino de "Subir el documento" en vez de generarse',
+  })
+  sourceDocument: { fileName: string; fileSize: number } | null;
 }
 
 /**

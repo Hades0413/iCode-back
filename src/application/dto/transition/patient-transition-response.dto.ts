@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { TransitionState } from '../../../domain/enums/transition-state.enum';
 import { ClinicalSummaryStatus } from '../../../domain/enums/clinical-summary-status.enum';
 import { CounterReferralStatus } from '../../../domain/enums/counter-referral-status.enum';
+import { ReferralReviewStatus } from '../../../domain/enums/referral-review-status.enum';
 import { ReferralAlertReason } from '../../../domain/enums/referral-alert-reason.enum';
 import {
   AppointmentDetails,
@@ -185,6 +186,14 @@ export class PatientTransitionResponseDto {
     enumName: 'CounterReferralStatusOrNone',
   })
   counterReferralStatus: CounterReferralStatus | 'NONE';
+
+  @ApiProperty({
+    enum: ReferralReviewStatus,
+    enumName: 'ReferralReviewStatusOrNone',
+    description:
+      '"NONE" (columna "PENDIENTE" en el front) significa que la posta/hospital todavía no revisó la historia clínica firmada',
+  })
+  referralReviewStatus: ReferralReviewStatus | 'NONE';
 
   @ApiProperty({
     description:
