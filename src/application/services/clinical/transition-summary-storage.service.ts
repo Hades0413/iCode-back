@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -28,6 +28,22 @@ export class TransitionSummaryStorageService {
 
   resolveAbsolutePath(storagePath: string): string {
     return join(this.basePath(), storagePath);
+  }
+
+  /**
+   * Borra el archivo original al descartar el borrador. ENOENT no es un
+   * error acá: si ya no está (o nunca llegó a escribirse del todo), el
+   * resultado que le importa a quien llama —que no quede el archivo— ya se
+   * cumple.
+   */
+  async delete(storagePath: string): Promise<void> {
+    try {
+      await unlink(this.resolveAbsolutePath(storagePath));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+    }
   }
 
   private basePath(): string {

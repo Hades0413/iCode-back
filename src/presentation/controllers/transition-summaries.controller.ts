@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -74,6 +75,19 @@ export class TransitionSummariesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.summaryService.update(patientId, dto, user.id);
+  }
+
+  @Delete(':patientId/clinical-summary')
+  @RequirePermission('PATIENT_WRITE')
+  @ApiOperation({
+    summary:
+      '"Descartar borrador" — vuelve a NONE para empezar de nuevo (a mano, con la plantilla, subiendo otro documento o generando de nuevo). Nunca sobre una historia ya firmada',
+  })
+  discard(
+    @Param('patientId', ParseIntPipe) patientId: number,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.summaryService.discard(patientId, user.id);
   }
 
   @Post(':patientId/clinical-summary/approval')

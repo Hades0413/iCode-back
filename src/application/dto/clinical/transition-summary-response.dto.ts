@@ -96,3 +96,13 @@ export class ClinicalSummaryResultDto {
   @ApiProperty({ type: TransitionSummaryResponseDto })
   summary: TransitionSummaryResponseDto;
 }
+
+/**
+ * Lo que devuelve DELETE al descartar el borrador: vuelve a NONE, así que
+ * no hay documento que devolver — solo la fila del paciente (ver
+ * DiscardClinicalSummaryResult en iCode-front).
+ */
+export class DiscardSummaryResultDto {
+  @ApiProperty({ type: PatientTransitionResponseDto })
+  patient: PatientTransitionResponseDto;
+}

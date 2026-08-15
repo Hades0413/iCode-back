@@ -16,6 +16,7 @@ import { PatientTransitionService } from '../transition/patient-transition.servi
 import { UpdateTransitionSummaryDto } from '../../dto/clinical/update-transition-summary.dto';
 import {
   ClinicalSummaryResultDto,
+  DiscardSummaryResultDto,
   TransitionSummaryResponseDto,
 } from '../../dto/clinical/transition-summary-response.dto';
 import {
@@ -208,6 +209,43 @@ export class TransitionSummaryService {
     summary.updatedById = currentUserId;
     const saved = await this.summaryRepository.save(summary);
     return this.toResultDto(patientId, saved);
+  }
+
+  /**
+   * "Descartar borrador" — vuelve a NONE para empezar de nuevo: a mano, con
+   * la plantilla, subiendo otro documento o pidiéndoselo otra vez a la IA.
+   * Nunca sobre uno ya firmado, misma ventana que "update" (una vez
+   * cumplidos los 18 la historia la maneja el hospital de adultos).
+   */
+  async discard(
+    patientId: number,
+    currentUserId: number,
+  ): Promise<DiscardSummaryResultDto> {
+    await this.patientTransitionService.assertSpecialtyMatches(
+      patientId,
+      currentUserId,
+    );
+    const context =
+      await this.patientTransitionService.getRuleContext(patientId);
+    if (context.monthsToEighteen <= 0) {
+      throw new ConflictException(
+        'Este paciente ya cumplió 18 — su historia clínica la maneja el hospital de adultos',
+      );
+    }
+    const summary = await this.getSummaryOrFail(patientId);
+    if (summary.status !== ClinicalSummaryStatus.DRAFT) {
+      throw new ConflictException(
+        'La historia clínica ya está firmada: no se puede descartar',
+      );
+    }
+
+    await this.summaryRepository.remove(summary);
+    if (summary.sourceStoragePath) {
+      await this.summaryStorageService.delete(summary.sourceStoragePath);
+    }
+
+    const patient = await this.patientTransitionService.findDetail(patientId);
+    return { patient };
   }
 
   async approve(
