@@ -5,7 +5,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
 // Contra el seed real (src/infrastructure/database/migrations) — password
-// de prueba documentada ahí: "Passw0rd1!".
+// de prueba documentada ahí: "12345".
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
 
@@ -40,7 +40,7 @@ describe('Auth (e2e)', () => {
   it('logs in, reads the profile, logs out, and the token stops working', async () => {
     const loginRes = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ userName: 'admin', password: 'Passw0rd1!' })
+      .send({ userName: 'admin', password: '12345' })
       .expect(200);
 
     const { accessToken } = loginRes.body as { accessToken: string };
@@ -69,7 +69,7 @@ describe('Auth (e2e)', () => {
   it("auditor1's effective permissions come from the CONS role, not AUDIT", async () => {
     const loginRes = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ userName: 'auditor1', password: 'Passw0rd1!' })
+      .send({ userName: 'auditor1', password: '12345' })
       .expect(200);
 
     const { accessToken } = loginRes.body as { accessToken: string };

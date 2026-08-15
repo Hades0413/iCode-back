@@ -94,7 +94,7 @@ export class JourneyController {
   @RequirePermission('APPOINTMENT_SELF_REPORT')
   @ApiOperation({
     summary:
-      'El paciente registra una cita que consiguió por su cuenta — 409 si ya tenía una',
+      'El paciente registra una cita que consiguió por su cuenta — 409 si ya tenía una, o si su referencia todavía no está aceptada',
   })
   reportAppointment(
     @Body() dto: ReportAppointmentDto,

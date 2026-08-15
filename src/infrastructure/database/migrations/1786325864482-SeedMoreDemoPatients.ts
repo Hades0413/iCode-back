@@ -10,9 +10,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * pipeline de deploy automático de principio a fin (push -> cron ->
  * migración en prod -> reinicio), no para sumar más casos narrativos.
  */
-export class SeedMoreDemoPatients1786325864482
-  implements MigrationInterface
-{
+export class SeedMoreDemoPatients1786325864482 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // ============================================================
     // 1) PACIENTES — 10 menores (17a 1m a 17a 10m) + 10 adultos

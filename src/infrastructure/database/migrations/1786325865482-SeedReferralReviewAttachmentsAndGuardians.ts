@@ -12,9 +12,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   tutor legal — un hueco real, no una elección: los 10 menores de esa
  *   tanda no tienen forma de que un tutor gestione su tutela todavía.
  */
-export class SeedReferralReviewAttachmentsAndGuardians1786325865482
-  implements MigrationInterface
-{
+export class SeedReferralReviewAttachmentsAndGuardians1786325865482 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // ============================================================
     // 1) ReferralReview — 20 filas, una por cada paciente YA adulto

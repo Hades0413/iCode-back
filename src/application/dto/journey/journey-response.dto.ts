@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { TransitionState } from '../../../domain/enums/transition-state.enum';
+import { ReferralReviewStatus } from '../../../domain/enums/referral-review-status.enum';
 import { HealthPostSummaryDto } from '../transition/patient-transition-response.dto';
 import { AppointmentDetails } from '../../../domain/entities/patients/patient-transition.entity';
 
@@ -117,6 +118,21 @@ export class TransitionJourneyDto {
   arriveMinutesEarly: number;
   @ApiProperty({ nullable: true }) admissionNote: string | null;
   @ApiProperty() summaryApproved: boolean;
+
+  @ApiProperty({
+    enum: ReferralReviewStatus,
+    enumName: 'ReferralReviewStatusOrNone',
+    description:
+      'Qué contestó el destino sobre su referencia, el mismo valor que la columna "Estado referencia" del tablero. "NONE" = todavía no la revisaron. Manda sobre la única acción de la app del paciente: hasta que no está ACCEPTED no hay cita que registrar.',
+  })
+  referralReviewStatus: ReferralReviewStatus | 'NONE';
+
+  @ApiProperty({
+    nullable: true,
+    description:
+      'Quién aceptó la referencia, para poder nombrarlo ("Hospital Sergio Bernales aceptó tu referencia"). null mientras no esté aceptada.',
+  })
+  referralAcceptedBy: string | null;
   @ApiProperty({ type: JourneyGuardianDto, nullable: true })
   guardian: JourneyGuardianDto | null;
   @ApiProperty({ type: JourneyMessageDto, nullable: true })

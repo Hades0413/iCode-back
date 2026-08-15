@@ -91,7 +91,7 @@ GUARDIAN_ACCESS_MANAGE           → solo el paciente (dueño)
 `Administrador` recibió los 9 permisos nuevos también (mismo criterio que
 el resto del seed: admin lo tiene todo).
 
-### Usuarios demo (todos con password `Passw0rd1!`)
+### Usuarios demo (todos con password `12345`)
 
 Se reutilizan usuarios que **ya existían** en `SeedInitialData` — son la
 misma persona vista desde otro dominio, no alguien distinto:
@@ -100,11 +100,12 @@ misma persona vista desde otro dominio, no alguien distinto:
 |---|---|---|
 | `pediatra1` | `ESPECIALISTA_PEDIATRIA` | ve `70000001` (su especialidad, `ONCO_PED`) |
 | `paciente1` | `PACIENTE_TITULAR` | dueño de `70000002` — `GET /journey` como OWNER |
-| `tutor1` | `ACOMPANANTE` | acompaña a `70000001` — `GET /journey` como GUARDIAN |
+| `tutor1` | `ACOMPANANTE` | acompaña a `70000002` — `GET /journey` como GUARDIAN, y su recordatorio le llega a `paciente1` (ver `FixDemoGuardianPairing`) |
+| `tutor2` | `ACOMPANANTE` | acompaña a `70000001`, el menor sin login propio — la misma vista GUARDIAN sobre un caso que recién empieza |
 | `referencias1` (nuevo) | `AREA_REFERENCIAS` (+ `PATIENT_READ`) | bandejas de `/referrals/*` |
 | `operador` (ya existía) | `OPER` (+ `PATIENT_READ`/`REPORT_READ`) | ve el tablero y el panel, no puede actuar (403 en cualquier escritura) — equivalente al `operador` del mock del front |
 | `invitado` (ya existía) | `GUEST` (0 permisos Puente18) | loguea bien, 403 en todo — equivalente al `sinpermisos` del mock |
-| `inactivo1` (nuevo) | `ESPECIALISTA_PEDIATRIA`, `State=false` | login con contraseña correcta pero **401** — equivalente al `inactivo` del mock (`system` de SeedInitialData no sirve para esto: tiene un hash de relleno que nunca matchea `Passw0rd1!`) |
+| `inactivo1` (nuevo) | `ESPECIALISTA_PEDIATRIA`, `State=false` | login con contraseña correcta pero **401** — equivalente al `inactivo` del mock (`system` de SeedInitialData no sirve para esto: tiene un hash de relleno que nunca matchea `12345`) |
 
 Los 9 casos de login del mock del front (`admin`, `medico`, `referencias`, `operador`, `paciente`, `tutor`, `sinpermisos`, `inactivo`) tienen un equivalente real acá, verificado uno por uno contra un Postgres real (ver sección 9).
 
@@ -281,6 +282,7 @@ cumplió 18 todavía, sin excepción.
 | PATCH | `/journey/checklist/:itemId` | `CHECKLIST_WRITE` | solo dueño (verificado a nivel de fila) |
 | POST | `/journey/reminders` | `GUARDIAN_REMIND` | solo tutor activo; 409 si `hasJourneyAccess=false` |
 | PUT | `/journey/guardian-access` | `GUARDIAN_ACCESS_MANAGE` | solo dueño, da/quita acceso |
+| PUT | `/journey/appointment` | `APPOINTMENT_SELF_REPORT` | solo dueño; 409 si ya tiene cita, y 409 si `referralReviewStatus !== 'ACCEPTED'` — sin referencia aceptada el hospital de adultos no da fecha |
 | DELETE | `/journey/messages/:messageId` | `JOURNEY_READ` | soft-delete, solo si el mensaje es de su propio paciente |
 
 ### La regla que no se rompió
@@ -344,15 +346,18 @@ make dev             # http://localhost:3000/api/docs (Swagger, botón Authorize
 ```
 
 `POST /auth/login` con cualquiera de los usuarios de la sección 1
-(password `Passw0rd1!`), copiar el `accessToken` en el botón "Authorize"
+(password `12345`), copiar el `accessToken` en el botón "Authorize"
 de Swagger. Casos demo ya cargados por el seed:
 
-- **`70000001`** (paciente ficticio menor, tutor `tutor1` activo) —
+- **`70000001`** (paciente ficticio menor, tutor `tutor2` activo) —
   estado `PENDING`, sin historia clínica todavía: para probar todo el
   flujo desde cero (generar historia, avisar a la posta, etc.).
-- **`70000002`** (paciente ficticio ya adulto, `paciente1`) — recorrido
-  completo: historia firmada, aviso, cita otorgada, carta enviada; para
-  ver el estado final de cada módulo sin tener que armarlo a mano.
+- **`70000002`** (paciente ficticio ya adulto, `paciente1`, con `tutor1`
+  acompañándolo) — recorrido completo: historia firmada, aviso, cita
+  otorgada, carta enviada; para ver el estado final de cada módulo sin
+  tener que armarlo a mano. Es también el par de la demo de "Mi
+  recorrido": lo que `tutor1` escribe como recordatorio, `paciente1` lo
+  lee en su app.
 
 ## 9. Verificación end-to-end (contra Postgres real)
 

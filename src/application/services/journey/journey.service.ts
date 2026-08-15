@@ -22,6 +22,7 @@ import { JourneyMessage } from '../../../domain/entities/journey/journey-message
 import { User } from '../../../domain/entities/user.entity';
 import { RelationshipType } from '../../../domain/enums/relationship-type.enum';
 import { ClinicalSummaryStatus } from '../../../domain/enums/clinical-summary-status.enum';
+import { ReferralReviewStatus } from '../../../domain/enums/referral-review-status.enum';
 import { TransitionState } from '../../../domain/enums/transition-state.enum';
 import { PatientTransitionService } from '../transition/patient-transition.service';
 import { JourneyAccessResponseDto } from '../../dto/journey/journey-response.dto';
@@ -341,6 +342,18 @@ export class JourneyService {
         admissionNote: transition?.admissionNote ?? null,
         summaryApproved:
           detail.summaryStatus === ClinicalSummaryStatus.APPROVED,
+        referralReviewStatus: detail.referralReviewStatus,
+        // Quién la aceptó, para poder nombrarlo. El destino es el hospital
+        // de adultos al que lo derivó la posta; si la posta todavía no
+        // redactó esa derivación, el destino visible es la posta misma.
+        // null salvo aceptada: nombrar a quien todavía no contestó (o a
+        // quien la rechazó) sería decirle a la persona algo que no pasó.
+        referralAcceptedBy:
+          detail.referralReviewStatus === ReferralReviewStatus.ACCEPTED
+            ? (detail.hospitalReferral?.hospital ??
+              detail.healthPost?.name ??
+              null)
+            : null,
         guardian: guardianDto,
         pendingMessage: pendingMessage
           ? {
@@ -374,7 +387,13 @@ export class JourneyService {
   /**
    * El paciente encontró su cita por su cuenta, sin esperar a que la
    * posta se la consiga — 409 si ya había una (evita pisar en silencio
-   * la que sí gestionó la posta).
+   * la que sí gestionó la posta) y 409 también si su referencia todavía
+   * no está aceptada: el hospital de adultos no da fecha sin ella, así que
+   * una cita registrada antes sería una fecha que no existe.
+   *
+   * El candado del formulario en la app es la misma regla dicha antes de
+   * tiempo, no la autorización: esconder un botón no autoriza nada
+   * (OWASP A01), y esta es la comprobación que de verdad cuenta.
    */
   async reportAppointment(
     dto: ReportAppointmentDto,
@@ -389,6 +408,12 @@ export class JourneyService {
     }
     if (transition.appointment) {
       throw new ConflictException('Ya tienes una cita registrada');
+    }
+    const detail = await this.patientTransitionService.findDetail(patient.id);
+    if (detail.referralReviewStatus !== ReferralReviewStatus.ACCEPTED) {
+      throw new ConflictException(
+        'Es necesaria la referencia aceptada para agendar una cita',
+      );
     }
 
     const appointment: AppointmentDetails = {

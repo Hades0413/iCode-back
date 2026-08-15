@@ -141,7 +141,7 @@ permiso puntual contra la vista `UserPermission` (ver
 [migrations/README.md](src/infrastructure/database/migrations/README.md)).
 
 Usuarios de prueba del seed: `admin`, `supervisor`, `auditor1`, etc., todos
-con password `Passw0rd1!` — ver la advertencia en
+con password `12345` — ver la advertencia en
 `SeedInitialData...ts` antes de usar este seed fuera de dev.
 
 ### Usuarios en línea (admin)
@@ -193,10 +193,11 @@ Endpoints principales (todos requieren sesión + el permiso indicado):
   #4); respeta la autorización vigente y la excepción de emergencia solo
   para `BASICA`.
 
-Usuarios demo del seed (misma contraseña `Passw0rd1!` que el resto):
-`tutor1` (tutor activo de un paciente menor), `paciente1` (paciente ya
-adulto, titular de sí mismo), `pediatra1`/`internista1` (personal de
-salud, cada uno vinculado a una IPRESS ficticia distinta).
+Usuarios demo del seed (misma contraseña `12345` que el resto):
+`paciente1` (paciente ya adulto, titular de sí mismo) con `tutor1`
+acompañándolo — el par de "Mi recorrido", los dos lados del mismo caso—,
+`tutor2` (tutor activo de un paciente menor) y `pediatra1`/`internista1`
+(personal de salud, cada uno vinculado a una IPRESS ficticia distinta).
 
 ## Seguridad
 

@@ -33,7 +33,7 @@
             "auth": { "type": "noauth" },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userName\": \"admin\",\n  \"password\": \"Passw0rd1!\"\n}"
+              "raw": "{\n  \"userName\": \"admin\",\n  \"password\": \"12345\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/login",

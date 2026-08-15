@@ -437,7 +437,7 @@ export class SeedInitialData1786325856482 implements MigrationInterface {
         ('tutor2','tutor2@example.com','Tutor','Ficticio Dos'),
         ('paciente1','paciente1@example.com','Paciente','Ficticio Adulto'),
         ('pediatra1','pediatra1@example.com','Pediatra','Ficticio Uno'),
-        ('internista1','internista1@example.com','Internista','Ficticio Uno')
+        ('docadulto','internista1@example.com','Internista','Ficticio Uno')
       ) AS v("UserName","Email","FirstName","LastName")
       CROSS JOIN (SELECT "Id" FROM "User" WHERE "UserName" = 'admin') AS adm
     `);
