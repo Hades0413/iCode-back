@@ -44,6 +44,11 @@ lerna-debug.log*
 .env.*
 !.env.example
 !.env.*.example
+# Sin el punto: "make env-setup" y las copias a mano dejan "env.dev"/"env.prod"
+# en la raíz, y esas traen DATABASE_PASSWORD. Las reglas de arriba no las
+# alcanzan porque empiezan por punto.
+env.*
+!env.*.example
 
 # =========================
 # Runtime data
