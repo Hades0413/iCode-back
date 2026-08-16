@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -69,5 +70,16 @@ export class PatientAttachmentsController {
     );
     const absolutePath = this.attachmentService.resolveDocumentPath(attachment);
     res.download(absolutePath, attachment.fileName);
+  }
+
+  @Delete(':patientId/attachments/:attachmentId')
+  @RequirePermission('PATIENT_WRITE')
+  @ApiOperation({ summary: 'Quita un examen o documento adjunto' })
+  remove(
+    @Param('patientId', ParseIntPipe) patientId: number,
+    @Param('attachmentId', ParseIntPipe) attachmentId: number,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.attachmentService.remove(patientId, attachmentId, user.id);
   }
 }

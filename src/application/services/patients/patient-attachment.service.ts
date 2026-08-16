@@ -105,6 +105,23 @@ export class PatientAttachmentService {
     return this.storageService.resolveAbsolutePath(attachment.storagePath);
   }
 
+  /**
+   * "Quitar" — soft delete (ver AuditableEntity): el archivo queda en disco
+   * y la fila en la tabla, solo deja de listarse. Un examen o informe ya
+   * adjuntado al caso no se destruye por un click, a diferencia de
+   * "Descartar borrador" que sí es una fila entera sin firmar.
+   */
+  async remove(
+    patientId: number,
+    attachmentId: number,
+    currentUserId: number,
+  ): Promise<void> {
+    const attachment = await this.getOrFail(patientId, attachmentId);
+    attachment.deletedAt = new Date();
+    attachment.deletedById = currentUserId;
+    await this.attachmentRepository.save(attachment);
+  }
+
   private assertValidFile(file: Express.Multer.File): void {
     if (!file) {
       throw new BadRequestException('Falta el archivo a adjuntar');
