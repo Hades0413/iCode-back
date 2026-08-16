@@ -10,6 +10,7 @@ import { PatientAttachment } from '../../../domain/entities/patients/patient-att
 import { User } from '../../../domain/entities/user.entity';
 import { PatientAttachmentStorageService } from './patient-attachment-storage.service';
 import { PatientAttachmentResponseDto } from '../../dto/patients/patient-attachment-response.dto';
+import { PatientTransitionService } from '../transition/patient-transition.service';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set([
@@ -38,6 +39,7 @@ export class PatientAttachmentService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly storageService: PatientAttachmentStorageService,
+    private readonly transitionService: PatientTransitionService,
   ) {}
 
   async findByPatient(
@@ -56,6 +58,20 @@ export class PatientAttachmentService {
       users.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()]),
     );
     return attachments.map((a) => this.toResponseDto(a, nameById));
+  }
+
+  /**
+   * "Pase de consulta" — el médico del hospital de adultos ve también los
+   * exámenes y documentos que viajaron con el caso, con el mismo código de
+   * "Mi recorrido" que ya resuelve la historia clínica de transferencia
+   * (ver TransitionSummaryService.findByConsultationCode).
+   */
+  async findByConsultationCode(
+    code: string,
+  ): Promise<PatientAttachmentResponseDto[]> {
+    const patientId =
+      await this.transitionService.findPatientIdByConsultationCode(code);
+    return this.findByPatient(patientId);
   }
 
   async upload(

@@ -40,6 +40,23 @@ export class PatientAttachmentsController {
     return this.attachmentService.findByPatient(patientId);
   }
 
+  /**
+   * "Pase de consulta" — 3 segmentos ("patients/consultation/:code/attachments")
+   * contra los 2 de ":patientId/attachments": no compiten por la misma ruta
+   * sea cual sea el orden de registro, mismo criterio que
+   * TransitionSummariesController (ver PUENTE18_FRONTEND_INTEGRATION.md,
+   * sección 3).
+   */
+  @Get('consultation/:code/attachments')
+  @RequirePermission('PATIENT_READ')
+  @ApiOperation({
+    summary:
+      'Resuelve el código único del paciente y devuelve sus exámenes y documentos adjuntos — para el médico que lo atiende',
+  })
+  findByConsultationCode(@Param('code') code: string) {
+    return this.attachmentService.findByConsultationCode(code);
+  }
+
   @Post(':patientId/attachments')
   @RequirePermission('PATIENT_WRITE')
   @ApiConsumes('multipart/form-data')
