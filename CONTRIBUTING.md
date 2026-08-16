@@ -79,3 +79,17 @@ Si algo quedó mal, se corrige con una migración nueva.
 `.env.dev`/`.env.prod` nunca se commitean (ver `.gitignore`). Si agregás una
 variable nueva, actualizá `.env.example` en el mismo PR — es la única
 plantilla versionada y de ahí sale `make env-setup`.
+
+## Política de uso y aprobación
+
+Este repositorio se publica bajo la licencia MIT. La licencia aplica al
+código y define el marco legal de uso, copia, modificación y distribución.
+
+Como regla interna del equipo, cualquier uso comercial, despliegue
+institucional, reutilización en un producto no académico o publicación fuera
+DEL proyecto requiere aprobación previa por escrito de los responsables del
+proyecto.
+
+Esta política es de gobernanza interna y no modifica ni restringe la licencia
+MIT. La intención es mantener un proceso claro de coordinación sin impedir el
+uso abierto del código en el marco del hackatón y la colaboración técnica.

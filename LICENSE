@@ -1,6 +1,7 @@
 MIT License
 
 Copyright (c) 2026 Puente 18+ — Hackatón Niño San Borja
+Equipo iCode, integrado por: Jose Dávila, Darlene Neyra, Claudia Sifuentes, Edward Mamani, Eduardo Jaime
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +20,39 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Additional Terms (compatible with open-source use)
+
+These additional clauses do not restrict the rights granted above (use, copy,
+modify, merge, publish, distribute, sublicense, and/or sell). They add
+attribution, trademark, and patent protections common in open-source licenses
+such as Apache 2.0.
+
+### 1. Trademark and Name Clause
+
+The names "Puente 18+" and any associated logos, branding, or team name are
+**not** licensed under this agreement. You may use, copy, modify, and
+redistribute the Software freely, but you may **not** use the name
+"Puente 18+" (or any confusingly similar name) to endorse, promote, or market
+a derivative product or service without prior written permission from the
+Equipo iCode. Internal use, academic citation, and factual references
+(e.g., "based on Puente 18+") are permitted.
+
+### 2. Defensive Patent Clause
+
+If any person or entity institutes patent litigation against the Equipo iCode
+alleging that the Software, or a contribution incorporated within the
+Software, infringes a patent, then any patent licenses granted to that person
+or entity under this agreement for the Software shall terminate as of the date
+such litigation is filed.
+
+### 3. Notification and Attribution Request (non-binding)
+
+The Equipo iCode kindly requests — without making it a legal condition of
+use — that if you deploy, redistribute, or build a production system based on
+this Software, you notify the original authors (e.g., via the project
+repository) and retain visible credit to "Puente 18+ — Hackatón Niño San
+Borja" in any public-facing documentation or About/Credits section. This
+request does not limit any of the rights granted in the MIT License above.
